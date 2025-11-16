@@ -1,22 +1,25 @@
-// apps/app/app/api/memories/route.ts - FIXED: Connection management
+// apps/app/app/api/memories/route.ts - FIXED: Proper connection pool with timeouts
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
-import { Client, Pool } from 'pg';
+import { Pool } from 'pg';
 
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
 const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://gating-service.internal:8080';
 
-// ✅ Use connection pool instead of singleton
+// ✅ Connection pool with proper timeout settings
 const connectionPools = new Map<string, Pool>();
 
 function getPool(connectionString: string): Pool {
   if (!connectionPools.has(connectionString)) {
     const pool = new Pool({
       connectionString,
-      max: 10, // Maximum pool size
-      idleTimeoutMillis: 30000, // Close idle connections after 30s
-      connectionTimeoutMillis: 10000, // Fail fast on connection issues
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+      // ✅ Set query timeout at pool level
+      statement_timeout: 10000, // 10s - database will cancel queries
+      query_timeout: 15000, // 15s - client will stop waiting
     });
     
     pool.on('error', (err) => {
@@ -60,7 +63,6 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // ✅ Get client from pool
     const pool = getPool(connectionString);
     client = await pool.connect();
 
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
     let memories;
 
     if (query) {
-      // ✅ Semantic search with timeout
+      // ✅ Semantic search
       console.log(`🔍 Semantic search for user ${user.id}: "${query}"`);
       
       const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
@@ -96,51 +98,44 @@ export async function GET(request: NextRequest) {
       const { embedding } = await embeddingResponse.json();
       const vectorString = `[${embedding.join(',')}]`;
 
-      // Search with timeout
-      const result = await client.query({
-        text: `
-          SELECT 
-            id::text as id,
-            content, 
-            metadata, 
-            created_at,
-            updated_at,
-            user_id,
-            1 - (embedding <=> $1::vector) as score
-          FROM user_data_schema.memory_embeddings
-          WHERE user_id = $2
-          ORDER BY embedding <=> $1::vector
-          LIMIT $3
-        `,
-        values: [vectorString, user.id, 20],
-        timeout: 10000, // 10s timeout
-      });
+      const result = await client.query(
+        `SELECT 
+          id::text as id,
+          content, 
+          metadata, 
+          created_at,
+          updated_at,
+          user_id,
+          1 - (embedding <=> $1::vector) as score
+        FROM user_data_schema.memory_embeddings
+        WHERE user_id = $2
+        ORDER BY embedding <=> $1::vector
+        LIMIT $3`,
+        [vectorString, user.id, 20]
+      );
 
       memories = result.rows.map((row: any) => ({
         ...row,
         score: parseFloat(row.score),
       }));
     } else {
-      // ✅ Get all memories with timeout
+      // ✅ Get all memories
       console.log(`📋 Fetching all memories for user ${user.id}`);
       
-      const result = await client.query({
-        text: `
-          SELECT 
-            id::text as id,
-            content, 
-            metadata, 
-            created_at,
-            updated_at,
-            user_id
-          FROM user_data_schema.memory_embeddings 
-          WHERE user_id = $1 
-          ORDER BY created_at DESC
-          LIMIT 100
-        `,
-        values: [user.id],
-        timeout: 5000,
-      });
+      const result = await client.query(
+        `SELECT 
+          id::text as id,
+          content, 
+          metadata, 
+          created_at,
+          updated_at,
+          user_id
+        FROM user_data_schema.memory_embeddings 
+        WHERE user_id = $1 
+        ORDER BY created_at DESC
+        LIMIT 100`,
+        [user.id]
+      );
 
       memories = result.rows;
     }
@@ -156,7 +151,7 @@ export async function GET(request: NextRequest) {
     
     // Better error messages
     if (error instanceof Error) {
-      if (error.message.includes('timeout')) {
+      if (error.message.includes('timeout') || error.message.includes('57014')) {
         return NextResponse.json(
           { error: 'Database query timeout - please try again' },
           { status: 504 }
@@ -175,7 +170,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   } finally {
-    // ✅ Always release client back to pool
     if (client) {
       try {
         client.release();
@@ -274,7 +268,7 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // ✅ STEP 2: Add to memory_embeddings with connection pool
+    // ✅ STEP 2: Add to memory_embeddings
     const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
     
     if (!ollamaUrl) {
@@ -305,14 +299,11 @@ export async function POST(request: NextRequest) {
       const { embedding } = await embeddingResponse.json();
       const vectorString = `[${embedding.join(',')}]`;
 
-      // Insert with timeout
-      await client.query({
-        text: `
-          INSERT INTO user_data_schema.memory_embeddings 
-          (user_id, content, embedding, metadata) 
-          VALUES ($1, $2, $3::vector, $4)
-        `,
-        values: [
+      await client.query(
+        `INSERT INTO user_data_schema.memory_embeddings 
+         (user_id, content, embedding, metadata) 
+         VALUES ($1, $2, $3::vector, $4)`,
+        [
           user.id,
           content.trim(),
           vectorString,
@@ -323,13 +314,11 @@ export async function POST(request: NextRequest) {
             gating_scores: gatingData.scores,
             gating_timestamp: new Date().toISOString(),
           })
-        ],
-        timeout: 5000,
-      });
+        ]
+      );
       
     } catch (embeddingError) {
       console.error('⚠️  Embedding failed (non-critical):', embeddingError);
-      // Continue even if embedding fails
     }
     
     // ✅ STEP 3: Update counts
@@ -425,12 +414,10 @@ export async function DELETE(request: NextRequest) {
     const pool = getPool(connectionString);
     client = await pool.connect();
 
-    // Delete with user verification
-    const result = await client.query({
-      text: 'DELETE FROM user_data_schema.memory_embeddings WHERE id = $1 AND user_id = $2 RETURNING id',
-      values: [memoryId, user.id],
-      timeout: 5000,
-    });
+    const result = await client.query(
+      'DELETE FROM user_data_schema.memory_embeddings WHERE id = $1 AND user_id = $2 RETURNING id',
+      [memoryId, user.id]
+    );
 
     if (result.rowCount === 0) {
       return NextResponse.json({ 

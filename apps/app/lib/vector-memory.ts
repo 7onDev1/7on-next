@@ -1,4 +1,4 @@
-// apps/app/lib/vector-memory.ts - FIXED: Use connection pool
+// apps/app/lib/vector-memory.ts - FIXED: Proper pool configuration with timeouts
 import { Pool, PoolClient } from 'pg';
 
 interface VectorMemoryConfig {
@@ -17,6 +17,9 @@ export class VectorMemory {
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
+      // ✅ Set timeouts at pool level
+      statement_timeout: 10000, // 10s
+      query_timeout: 15000, // 15s
     });
     
     this.pool.on('error', (err) => {
@@ -28,7 +31,6 @@ export class VectorMemory {
   }
 
   async connect() {
-    // Test connection
     const client = await this.pool.connect();
     try {
       await client.query('SELECT 1');
@@ -95,14 +97,13 @@ export class VectorMemory {
       
       const vectorString = `[${embedding.join(',')}]`;
       
-      const result = await client.query({
-        text: `INSERT INTO user_data_schema.memory_embeddings 
-               (user_id, content, embedding, metadata) 
-               VALUES ($1, $2, $3::vector, $4)
-               RETURNING id, created_at`,
-        values: [userId, content, vectorString, JSON.stringify(metadata || {})],
-        timeout: 5000,
-      });
+      const result = await client.query(
+        `INSERT INTO user_data_schema.memory_embeddings 
+         (user_id, content, embedding, metadata) 
+         VALUES ($1, $2, $3::vector, $4)
+         RETURNING id, created_at`,
+        [userId, content, vectorString, JSON.stringify(metadata || {})]
+      );
 
       console.log(`✅ Memory added with ID: ${result.rows[0].id}`);
       return result.rows[0];
@@ -119,22 +120,21 @@ export class VectorMemory {
       const queryEmbedding = await this.generateEmbedding(query);
       const vectorString = `[${queryEmbedding.join(',')}]`;
       
-      const result = await client.query({
-        text: `SELECT 
-                id::text as id,
-                content, 
-                metadata, 
-                created_at,
-                updated_at,
-                user_id,
-                1 - (embedding <=> $1::vector) as score
-               FROM user_data_schema.memory_embeddings
-               WHERE user_id = $2
-               ORDER BY embedding <=> $1::vector
-               LIMIT $3`,
-        values: [vectorString, userId, limit],
-        timeout: 10000,
-      });
+      const result = await client.query(
+        `SELECT 
+          id::text as id,
+          content, 
+          metadata, 
+          created_at,
+          updated_at,
+          user_id,
+          1 - (embedding <=> $1::vector) as score
+         FROM user_data_schema.memory_embeddings
+         WHERE user_id = $2
+         ORDER BY embedding <=> $1::vector
+         LIMIT $3`,
+        [vectorString, userId, limit]
+      );
 
       console.log(`✅ Found ${result.rows.length} memories`);
 
@@ -157,25 +157,24 @@ export class VectorMemory {
     try {
       console.log(`📋 Fetching all memories for user ${userId}`);
       
-      const result = await client.query({
-        text: `SELECT 
-                id::text as id,
-                content, 
-                metadata, 
-                created_at,
-                updated_at,
-                user_id
-               FROM user_data_schema.memory_embeddings 
-               WHERE user_id = $1 
-               ORDER BY created_at DESC
-               LIMIT 100`,
-        values: [userId],
-        timeout: 5000,
-      });
+      const result = await client.query(
+        `SELECT 
+          id::text as id,
+          content, 
+          metadata, 
+          created_at,
+          updated_at,
+          user_id
+         FROM user_data_schema.memory_embeddings 
+         WHERE user_id = $1 
+         ORDER BY created_at DESC
+         LIMIT 100`,
+        [userId]
+      );
       
       console.log(`✅ Found ${result.rows.length} memories`);
       
-      return result.rows.map(row => ({
+      return result.rows.map((row: any) => ({
         id: row.id,
         content: row.content,
         metadata: row.metadata,
@@ -199,11 +198,7 @@ export class VectorMemory {
       
       const params = userId ? [memoryId, userId] : [memoryId];
       
-      const result = await client.query({
-        text: query,
-        values: params,
-        timeout: 5000,
-      });
+      const result = await client.query(query, params);
       
       if (result.rowCount === 0) {
         throw new Error('Memory not found or access denied');
@@ -222,19 +217,18 @@ export class VectorMemory {
     
     const client = await this.pool.connect();
     try {
-      const result = await client.query({
-        text: `SELECT 
-                id::text as id,
-                content, 
-                metadata, 
-                created_at
-               FROM user_data_schema.memory_embeddings 
-               WHERE user_id = $1 
-               ORDER BY created_at DESC
-               LIMIT $2`,
-        values: [userId, limit],
-        timeout: 5000,
-      });
+      const result = await client.query(
+        `SELECT 
+          id::text as id,
+          content, 
+          metadata, 
+          created_at
+         FROM user_data_schema.memory_embeddings 
+         WHERE user_id = $1 
+         ORDER BY created_at DESC
+         LIMIT $2`,
+        [userId, limit]
+      );
       return result.rows;
     } finally {
       client.release();
@@ -258,7 +252,7 @@ export class VectorMemory {
   }
 }
 
-// ✅ Use connection pool singleton
+// ✅ Singleton pattern with proper pool
 const instances = new Map<string, VectorMemory>();
 
 export async function getVectorMemory(connectionString: string, ollamaUrl?: string): Promise<VectorMemory> {
