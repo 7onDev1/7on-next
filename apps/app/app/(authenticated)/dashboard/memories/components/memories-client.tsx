@@ -594,10 +594,12 @@ export function MemoriesClient({
                             {memory.id.slice(0, 8)}...
                           </code>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          <span>{new Date(memory.created_at).toLocaleString()}</span>
-                        </div>
+                        {mounted && (
+                          <div className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            <span>{new Date(memory.created_at).toLocaleString()}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                     
