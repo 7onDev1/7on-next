@@ -277,36 +277,41 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
     }
   }, [userId]);
 
-  const fetchStats = useCallback(async () => {
-    if (!userId) return;
-    try {
-      const response = await fetch(`/api/user/n8n-status?userId=${userId}`);
-      if (response.ok) {
-        const data = await response.json();
-        setStats({ activeConnections: data.injected_providers_count || 0 });
-        
-        // ✅ FIX: Logic ที่ถูกต้อง
-        const projectReady = data.northflank_project_status === 'ready';
-        const isInitialized = data.postgres_schema_initialized || false;
-        const hasCredential = !!data.n8n_postgres_credential_id;
-        
-        console.log('📊 Memory Status:', {
-          projectReady,
-          isInitialized,
-          hasCredential,
-          projectStatus: data.northflank_project_status
-        });
-        
-        setMemoriesStatus({
-          isInitialized,
-          hasCredential,
-          projectReady,
-        });
-      }
-    } catch (e) {
-      console.error("Error fetching stats:", e);
+const fetchStats = useCallback(async () => {
+  if (!userId) return;
+  try {
+    // ✅ FIX: ไม่ต้องส่ง userId - ใช้ Clerk auth ที่ server
+    const response = await fetch('/api/user/n8n-status');
+    
+    if (response.ok) {
+      const data = await response.json();
+      setStats({ activeConnections: data.injected_providers_count || 0 });
+      
+      // ✅ FIX: Logic ที่ถูกต้อง
+      const projectReady = data.northflank_project_status === 'ready';
+      const isInitialized = data.postgres_schema_initialized || false;
+      const hasCredential = !!data.n8n_postgres_credential_id;
+      
+      console.log('📊 Memory Status:', {
+        projectReady,
+        isInitialized,
+        hasCredential,
+        projectStatus: data.northflank_project_status,
+        rawData: data
+      });
+      
+      setMemoriesStatus({
+        isInitialized,
+        hasCredential,
+        projectReady,
+      });
+    } else {
+      console.error('Failed to fetch stats:', response.status);
     }
-  }, [userId]);
+  } catch (e) {
+    console.error("Error fetching stats:", e);
+  }
+}, [userId]);
 
   const handleDisconnect = async (service: string, label: string) => {
     if (!userId) {
