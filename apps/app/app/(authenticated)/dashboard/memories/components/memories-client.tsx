@@ -1,4 +1,4 @@
-// apps/app/app/(authenticated)/dashboard/memories/components/memories-client.tsx - IMPROVED
+// apps/app/app/(authenticated)/dashboard/memories/components/memories-client.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -38,6 +38,7 @@ export function MemoriesClient({
   const [ollamaStatus, setOllamaStatus] = useState<any>(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
   const [lastGatingResult, setLastGatingResult] = useState<any>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -90,7 +91,6 @@ export function MemoriesClient({
       
       if (data.status === 'pulling') {
         setError('Models are being downloaded. This may take 2-3 minutes. Please wait...');
-        // Check again after 30 seconds
         setTimeout(checkOllamaStatus, 30000);
       } else if (data.status === 'ready') {
         setOllamaStatus(data);
@@ -163,7 +163,7 @@ export function MemoriesClient({
   const handleAddMemory = async () => {
     if (!newMessage.trim()) return;
 
-    setLoading(true);
+    setAdding(true);
     setError(null);
     setLastGatingResult(null);
     
@@ -205,7 +205,7 @@ export function MemoriesClient({
       console.error('Add error:', err);
       setError((err as Error).message);
     } finally {
-      setLoading(false);
+      setAdding(false);
     }
   };
 
@@ -232,7 +232,15 @@ export function MemoriesClient({
     }
   };
 
-  // ===== Render States =====
+  // ✅ FIX: Safe date formatter
+  const formatDate = (dateString: string | Date) => {
+    if (!mounted) return '';
+    try {
+      return new Date(dateString).toLocaleString();
+    } catch {
+      return 'Invalid date';
+    }
+  };
 
   if (!mounted) {
     return (
@@ -242,7 +250,6 @@ export function MemoriesClient({
     );
   }
 
-  // Project not ready
   if (!projectStatus || projectStatus !== 'ready') {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -261,9 +268,6 @@ export function MemoriesClient({
               <p className="text-sm text-muted-foreground">
                 Current status: <strong>{projectStatus || 'pending'}</strong>
               </p>
-              <p className="text-sm text-muted-foreground">
-                This usually takes 5-10 minutes. Please check back shortly.
-              </p>
               <Button onClick={() => window.location.reload()} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Check Status
@@ -275,7 +279,6 @@ export function MemoriesClient({
     );
   }
 
-  // Database not initialized
   if (!isInitialized) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -313,7 +316,6 @@ export function MemoriesClient({
     );
   }
 
-  // Waiting for N8N credential
   if (!hasCredential) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -339,7 +341,6 @@ export function MemoriesClient({
     );
   }
 
-  // ===== Main Interface =====
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -356,7 +357,6 @@ export function MemoriesClient({
         </Button>
       </div>
 
-      {/* Ollama Status */}
       {ollamaStatus && (
         <Card className={
           ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed
@@ -427,7 +427,6 @@ export function MemoriesClient({
         </Card>
       )}
 
-      {/* Error Display */}
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -435,7 +434,6 @@ export function MemoriesClient({
         </Alert>
       )}
 
-      {/* Gating Result */}
       {lastGatingResult && (
         <Alert className={
           lastGatingResult.routing === 'good' ? 'border-green-200 dark:border-green-800' :
@@ -485,7 +483,6 @@ export function MemoriesClient({
         </Alert>
       )}
 
-      {/* Semantic Search */}
       <Card className="border-purple-200 dark:border-purple-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -501,7 +498,7 @@ export function MemoriesClient({
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSemanticSearch()}
               className="flex-1"
-              disabled={!ollamaStatus?.hasNomicEmbed}
+              disabled={!ollamaStatus?.hasNomicEmbed || loading}
             />
             <Button 
               onClick={handleSemanticSearch} 
@@ -515,7 +512,6 @@ export function MemoriesClient({
         </CardContent>
       </Card>
 
-      {/* Add Memory */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -531,54 +527,19 @@ export function MemoriesClient({
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
               className="flex-1"
-              disabled={!ollamaStatus?.hasNomicEmbed}
+              disabled={!ollamaStatus?.hasNomicEmbed || adding}
             />
             <Button 
               onClick={handleAddMemory} 
-              disabled={loading || !newMessage.trim() || !ollamaStatus?.hasNomicEmbed}
+              disabled={adding || !newMessage.trim() || !ollamaStatus?.hasNomicEmbed}
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">🤖 Converted to vectors + Content Gating</p>
         </CardContent>
       </Card>
 
-      {/* Statistics */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Statistics
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                {searchMode === 'semantic' ? 'Search Results' : 'Total Memories'}
-              </p>
-              <p className="text-2xl font-bold">{memories.length}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Search Mode</p>
-              <p className="text-lg font-semibold">
-                {searchMode === 'semantic' ? '🔍 Semantic' : '📋 All'}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Embedding Model</p>
-              <p className="text-lg font-semibold">Ollama (768-dim)</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Vector Storage</p>
-              <p className="text-lg font-semibold">pgvector + HNSW</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Memories List */}
       <Card>
         <CardHeader>
           <CardTitle>
@@ -592,25 +553,11 @@ export function MemoriesClient({
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : error ? (
-            <div className="text-center py-12 text-red-500">
-              <AlertCircle className="h-8 w-8 mx-auto mb-2" />
-              <p className="font-semibold">Error loading memories</p>
-              <p className="text-sm mt-1">{error}</p>
-              <Button onClick={fetchAllMemories} variant="outline" className="mt-4">
-                Try Again
-              </Button>
-            </div>
           ) : memories.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="font-semibold">
                 {searchMode === 'semantic' ? 'No matching memories found' : 'No memories yet'}
-              </p>
-              <p className="text-sm">
-                {searchMode === 'semantic' 
-                  ? 'Try a different search query' 
-                  : 'Add your first memory above'}
               </p>
             </div>
           ) : (
@@ -633,18 +580,6 @@ export function MemoriesClient({
                           } className="text-xs">
                             {memory.metadata.gating_routing}
                           </Badge>
-                          
-                          {memory.metadata.gating_valence && (
-                            <Badge variant="outline" className="text-xs">
-                              {memory.metadata.gating_valence}
-                            </Badge>
-                          )}
-                          
-                          {memory.metadata.gating_scores?.alignment && (
-                            <Badge variant="outline" className="text-xs">
-                              {(memory.metadata.gating_scores.alignment * 100).toFixed(0)}% aligned
-                            </Badge>
-                          )}
                         </div>
                       )}
                       
@@ -656,19 +591,9 @@ export function MemoriesClient({
                         </div>
                       )}
                       
-                      <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <span className="font-semibold">ID:</span>
-                          <code className="bg-muted px-1 py-0.5 rounded font-mono">
-                            {memory.id.slice(0, 8)}...
-                          </code>
-                        </div>
-                        {mounted && (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{new Date(memory.created_at).toLocaleString()}</span>
-                          </div>
-                        )}
+                      <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{formatDate(memory.created_at)}</span>
                       </div>
                     </div>
                     
