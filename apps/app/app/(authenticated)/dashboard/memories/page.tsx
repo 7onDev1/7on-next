@@ -3,22 +3,7 @@ import { auth, currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { database } from '@repo/database';
 import { Header } from '../../components/header';
-import dynamic from 'next/dynamic';
-
-// ✅ FIX: Dynamic import with ssr: false
-const MemoriesClient = dynamic(
-  () => import('./components/memories-client').then(mod => ({ 
-    default: mod.MemoriesClient 
-  })),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-gray-100" />
-      </div>
-    )
-  }
-);
+import { MemoriesClient } from './components/memories-client';
 
 export const metadata = {
   title: 'Memories',
