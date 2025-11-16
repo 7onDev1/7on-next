@@ -1,4 +1,3 @@
-// apps/app/app/(authenticated)/dashboard/memories/components/memories-client.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -9,17 +8,12 @@ import { Alert, AlertDescription } from "@repo/design-system/components/ui/alert
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { Loader2, Database, AlertCircle, RefreshCw, Trash2, Clock, Search, Plus, Sparkles, CheckCircle2, Shield, AlertTriangle } from "lucide-react";
 
-interface OllamaStatus {
-  status: 'online' | 'offline' | 'unreachable' | 'pulling';
-  models: string[];
-  hasNomicEmbed: boolean;
-}
-
-interface GatingResult {
-  routing: 'good' | 'bad' | 'review';
-  valence: string;
-  scores: any;
-  safe_counterfactual?: string;
+interface MemoriesClientProps {
+  userId: string;
+  isInitialized: boolean;
+  hasCredential: boolean;
+  setupError: string | null;
+  projectStatus: string | null;
 }
 
 export function MemoriesClient({ 
@@ -28,7 +22,8 @@ export function MemoriesClient({
   hasCredential, 
   setupError,
   projectStatus 
-}: any) {
+}: MemoriesClientProps) {
+  const [mounted, setMounted] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,24 +31,23 @@ export function MemoriesClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [newMessage, setNewMessage] = useState("");
   const [searchMode, setSearchMode] = useState<'all' | 'semantic'>('all');
-  
-  // Ollama status
-  const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
+  const [ollamaStatus, setOllamaStatus] = useState<any>(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
-  
-  // ✅ NEW: Gating result state
-  const [lastGatingResult, setLastGatingResult] = useState<GatingResult | null>(null);
-  
+  const [lastGatingResult, setLastGatingResult] = useState<any>(null);
+
   useEffect(() => {
-    if (isInitialized && hasCredential) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && isInitialized && hasCredential) {
       checkOllamaStatus();
       fetchAllMemories();
-    } else {
+    } else if (mounted) {
       setLoading(false);
     }
-  }, [isInitialized, hasCredential]);
-  
-  // Check Ollama status
+  }, [mounted, isInitialized, hasCredential]);
+
   const checkOllamaStatus = async () => {
     try {
       setCheckingOllama(true);
@@ -66,8 +60,7 @@ export function MemoriesClient({
       setCheckingOllama(false);
     }
   };
-  
-  // Setup Ollama (pull models)
+
   const setupOllama = async () => {
     try {
       setCheckingOllama(true);
@@ -81,7 +74,6 @@ export function MemoriesClient({
       
       if (data.status === 'pulling') {
         setError('Models are being downloaded. This may take 2-3 minutes. Please wait...');
-        // Poll status every 10 seconds
         setTimeout(checkOllamaStatus, 10000);
       } else if (data.status === 'ready') {
         setOllamaStatus(data);
@@ -89,14 +81,13 @@ export function MemoriesClient({
       } else {
         setError(data.error || 'Ollama setup failed');
       }
-      
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setCheckingOllama(false);
     }
   };
-  
+
   const fetchAllMemories = async () => {
     try {
       setLoading(true);
@@ -119,7 +110,7 @@ export function MemoriesClient({
       setLoading(false);
     }
   };
-  
+
   const handleSemanticSearch = async () => {
     if (!searchQuery.trim()) {
       fetchAllMemories();
@@ -152,7 +143,6 @@ export function MemoriesClient({
     }
   };
 
-  // ✅ UPDATED: Add memory with gating result handling
   const handleAddMemory = async () => {
     if (!newMessage.trim()) return;
 
@@ -178,7 +168,6 @@ export function MemoriesClient({
       const data = await response.json();
       
       if (data.success) {
-        // ✅ Show gating result
         setLastGatingResult({
           routing: data.routing,
           valence: data.valence,
@@ -225,8 +214,15 @@ export function MemoriesClient({
       setDeleting(null);
     }
   };
-  
-  // Status: Schema initialized but no N8N credential yet
+
+  if (!mounted) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
   if (isInitialized && !hasCredential) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -239,12 +235,8 @@ export function MemoriesClient({
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-muted-foreground">
-                ✅ Database schema created successfully!
-              </p>
-              <p className="text-muted-foreground">
-                ⏳ Waiting for N8N service to be ready...
-              </p>
+              <p className="text-muted-foreground">✅ Database schema created successfully!</p>
+              <p className="text-muted-foreground">⏳ Waiting for N8N service to be ready...</p>
               <Button onClick={() => window.location.reload()} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Check Status
@@ -255,8 +247,7 @@ export function MemoriesClient({
       </div>
     );
   }
-  
-  // Status: Not initialized
+
   if (!isInitialized) {
     return (
       <div className="max-w-7xl mx-auto p-6">
@@ -272,13 +263,9 @@ export function MemoriesClient({
               {setupError ? (
                 <p className="text-red-600">{setupError}</p>
               ) : projectStatus === 'ready' ? (
-                <p className="text-muted-foreground">
-                  Click "Setup Database" on the dashboard to begin.
-                </p>
+                <p className="text-muted-foreground">Click "Setup Database" on the dashboard to begin.</p>
               ) : (
-                <p className="text-muted-foreground">
-                  Project is being created...
-                </p>
+                <p className="text-muted-foreground">Project is being created...</p>
               )}
               <Button onClick={() => window.location.reload()} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -290,27 +277,23 @@ export function MemoriesClient({
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
             <Sparkles className="h-8 w-8 text-purple-500" />
-            Semantic Memories with Gating
+            Semantic Memories
           </h1>
-          <p className="text-muted-foreground">
-            AI-powered memory with content moderation using Ollama + pgvector
-          </p>
+          <p className="text-muted-foreground">AI-powered memory with Ollama + pgvector</p>
         </div>
         <Button onClick={fetchAllMemories} disabled={loading}>
           {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
           Refresh
         </Button>
       </div>
-      
-      {/* Ollama Status Card */}
+
       {ollamaStatus && (
         <Card className={
           ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed
@@ -380,16 +363,14 @@ export function MemoriesClient({
           </CardContent>
         </Card>
       )}
-      
-      {/* Error Alert */}
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-      
-      {/* ✅ NEW: Gating Result Alert */}
+
       {lastGatingResult && (
         <Alert className={
           lastGatingResult.routing === 'good' ? 'border-green-200 dark:border-green-800' :
@@ -402,9 +383,7 @@ export function MemoriesClient({
             {lastGatingResult.routing === 'review' && <AlertTriangle className="h-5 w-5 text-yellow-600" />}
             
             <div className="flex-1">
-              <div className="font-semibold">
-                Content Moderation Result
-              </div>
+              <div className="font-semibold">Content Moderation Result</div>
               <div className="text-sm mt-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge variant={
@@ -414,9 +393,7 @@ export function MemoriesClient({
                   }>
                     {lastGatingResult.routing.toUpperCase()} Channel
                   </Badge>
-                  <Badge variant="outline">
-                    Valence: {lastGatingResult.valence}
-                  </Badge>
+                  <Badge variant="outline">Valence: {lastGatingResult.valence}</Badge>
                   {lastGatingResult.scores && (
                     <Badge variant="outline">
                       Alignment: {(lastGatingResult.scores.alignment * 100).toFixed(0)}%
@@ -442,8 +419,7 @@ export function MemoriesClient({
           </div>
         </Alert>
       )}
-      
-      {/* Semantic Search Card */}
+
       <Card className="border-purple-200 dark:border-purple-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -469,13 +445,10 @@ export function MemoriesClient({
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            🧠 AI understands meaning
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">🧠 AI understands meaning</p>
         </CardContent>
       </Card>
 
-      {/* Add Memory Card */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -500,13 +473,10 @@ export function MemoriesClient({
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            🤖 Converted to 768-dim vectors using Ollama + Content Gating
-          </p>
+          <p className="text-xs text-muted-foreground mt-2">🤖 Converted to vectors + Content Gating</p>
         </CardContent>
       </Card>
-      
-      {/* Stats */}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -539,8 +509,7 @@ export function MemoriesClient({
           </div>
         </CardContent>
       </Card>
-      
-      {/* Memories List - Enhanced with Gating Info */}
+
       <Card>
         <CardHeader>
           <CardTitle>
@@ -584,10 +553,8 @@ export function MemoriesClient({
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      {/* Main content */}
                       <p className="text-sm break-words font-medium">{memory.content}</p>
                       
-                      {/* ✅ NEW: Gating badges */}
                       {memory.metadata?.gating_routing && (
                         <div className="mt-2 flex items-center gap-2 flex-wrap">
                           <Badge variant={
@@ -612,7 +579,6 @@ export function MemoriesClient({
                         </div>
                       )}
                       
-                      {/* Similarity score for semantic search */}
                       {memory.score !== undefined && (
                         <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-xs">
                           <Sparkles className="h-3 w-3" />
@@ -621,19 +587,6 @@ export function MemoriesClient({
                         </div>
                       )}
                       
-                      {/* Metadata */}
-                      {memory.metadata && Object.keys(memory.metadata).length > 0 && (
-                        <details className="mt-2">
-                          <summary className="text-xs text-muted-foreground cursor-pointer hover:underline">
-                            View metadata
-                          </summary>
-                          <pre className="mt-2 text-xs text-muted-foreground bg-muted p-2 rounded overflow-auto">
-                            {JSON.stringify(memory.metadata, null, 2)}
-                          </pre>
-                        </details>
-                      )}
-                      
-                      {/* ID and timestamps */}
                       <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                         <div className="flex items-center gap-1">
                           <span className="font-semibold">ID:</span>
@@ -645,15 +598,9 @@ export function MemoriesClient({
                           <Clock className="h-3 w-3" />
                           <span>{new Date(memory.created_at).toLocaleString()}</span>
                         </div>
-                        {memory.user_id && (
-                          <div className="flex items-center gap-1">
-                            <span className="opacity-50">User: {memory.user_id.slice(0, 8)}...</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                     
-                    {/* Delete button */}
                     <Button
                       variant="ghost"
                       size="sm"
