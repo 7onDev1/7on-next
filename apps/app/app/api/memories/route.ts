@@ -1,4 +1,4 @@
-// apps/app/app/api/memories/route.ts - FIXED: Proper connection pool with timeouts
+// apps/app/app/api/memories/route.ts - FIXED: Proper pool config without invalid options
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
@@ -7,7 +7,7 @@ import { Pool } from 'pg';
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
 const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://gating-service.internal:8080';
 
-// ✅ Connection pool with proper timeout settings
+// ✅ Simple pool configuration
 const connectionPools = new Map<string, Pool>();
 
 function getPool(connectionString: string): Pool {
@@ -15,11 +15,8 @@ function getPool(connectionString: string): Pool {
     const pool = new Pool({
       connectionString,
       max: 10,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 0, // Disable to prevent premature termination
       connectionTimeoutMillis: 10000,
-      // ✅ Set query timeout at pool level
-      statement_timeout: 10000, // 10s - database will cancel queries
-      query_timeout: 15000, // 15s - client will stop waiting
     });
     
     pool.on('error', (err) => {
@@ -149,7 +146,6 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('❌ GET error:', error);
     
-    // Better error messages
     if (error instanceof Error) {
       if (error.message.includes('timeout') || error.message.includes('57014')) {
         return NextResponse.json(
@@ -259,7 +255,6 @@ export async function POST(request: NextRequest) {
     } catch (gatingError) {
       console.error('❌ Gating service unreachable:', gatingError);
       
-      // Fallback: treat as neutral/review
       gatingData = {
         routing: 'review',
         valence: 'neutral',
@@ -281,7 +276,6 @@ export async function POST(request: NextRequest) {
       
       console.log(`📝 Adding to memory_embeddings for user: ${user.id}`);
       
-      // Generate embedding
       const embeddingResponse = await fetch(`${ollamaUrl}/api/embeddings`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -1,4 +1,4 @@
-// apps/app/lib/vector-memory.ts - FIXED: Proper pool configuration with timeouts
+// apps/app/lib/vector-memory.ts - FIXED: Correct pool configuration
 import { Pool, PoolClient } from 'pg';
 
 interface VectorMemoryConfig {
@@ -9,17 +9,14 @@ interface VectorMemoryConfig {
 export class VectorMemory {
   private pool: Pool;
   private ollamaUrl: string;
-  private embeddingModel: string = 'nomic-embed-text'; // 768 dimensions
+  private embeddingModel: string = 'nomic-embed-text';
 
   constructor(config: VectorMemoryConfig) {
     this.pool = new Pool({
       connectionString: config.connectionString,
       max: 10,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 0, // Disable to prevent premature termination
       connectionTimeoutMillis: 10000,
-      // ✅ Set timeouts at pool level
-      statement_timeout: 10000, // 10s
-      query_timeout: 15000, // 15s
     });
     
     this.pool.on('error', (err) => {
@@ -252,7 +249,6 @@ export class VectorMemory {
   }
 }
 
-// ✅ Singleton pattern with proper pool
 const instances = new Map<string, VectorMemory>();
 
 export async function getVectorMemory(connectionString: string, ollamaUrl?: string): Promise<VectorMemory> {
