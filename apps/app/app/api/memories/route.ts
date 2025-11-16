@@ -1,37 +1,15 @@
-// apps/app/app/api/memories/route.ts - FIXED: Proper pool config without invalid options
+// apps/app/app/api/memories/route.ts - FIXED: Complete CRUD with Gating
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
-import { Pool } from 'pg';
+import { getVectorMemory } from '@/lib/vector-memory';
+import { Client } from 'pg';
 
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
 const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://gating-service.internal:8080';
 
-// ✅ Simple pool configuration
-const connectionPools = new Map<string, Pool>();
-
-function getPool(connectionString: string): Pool {
-  if (!connectionPools.has(connectionString)) {
-    const pool = new Pool({
-      connectionString,
-      max: 10,
-      idleTimeoutMillis: 0, // Disable to prevent premature termination
-      connectionTimeoutMillis: 10000,
-    });
-    
-    pool.on('error', (err) => {
-      console.error('❌ Postgres pool error:', err);
-    });
-    
-    connectionPools.set(connectionString, pool);
-  }
-  return connectionPools.get(connectionString)!;
-}
-
 // ===== GET: Fetch memories (all or semantic search) =====
 export async function GET(request: NextRequest) {
-  let client: any = null;
-  
   try {
     const { userId: clerkUserId } = await auth();
     if (!clerkUserId) {
@@ -60,8 +38,8 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const pool = getPool(connectionString);
-    client = await pool.connect();
+    const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
+    const vectorMemory = await getVectorMemory(connectionString, ollamaUrl);
 
     const { searchParams } = new URL(request.url);
     const query = searchParams.get('query');
@@ -69,72 +47,13 @@ export async function GET(request: NextRequest) {
     let memories;
 
     if (query) {
-      // ✅ Semantic search
+      // Semantic search
       console.log(`🔍 Semantic search for user ${user.id}: "${query}"`);
-      
-      const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
-      if (!ollamaUrl) {
-        throw new Error('OLLAMA_EXTERNAL_URL not configured');
-      }
-      
-      // Generate embedding
-      const embeddingResponse = await fetch(`${ollamaUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'nomic-embed-text',
-          prompt: query,
-        }),
-        signal: AbortSignal.timeout(15000),
-      });
-
-      if (!embeddingResponse.ok) {
-        throw new Error(`Embedding generation failed: ${embeddingResponse.status}`);
-      }
-
-      const { embedding } = await embeddingResponse.json();
-      const vectorString = `[${embedding.join(',')}]`;
-
-      const result = await client.query(
-        `SELECT 
-          id::text as id,
-          content, 
-          metadata, 
-          created_at,
-          updated_at,
-          user_id,
-          1 - (embedding <=> $1::vector) as score
-        FROM user_data_schema.memory_embeddings
-        WHERE user_id = $2
-        ORDER BY embedding <=> $1::vector
-        LIMIT $3`,
-        [vectorString, user.id, 20]
-      );
-
-      memories = result.rows.map((row: any) => ({
-        ...row,
-        score: parseFloat(row.score),
-      }));
+      memories = await vectorMemory.searchMemories(user.id, query, 20);
     } else {
-      // ✅ Get all memories
+      // Get all memories
       console.log(`📋 Fetching all memories for user ${user.id}`);
-      
-      const result = await client.query(
-        `SELECT 
-          id::text as id,
-          content, 
-          metadata, 
-          created_at,
-          updated_at,
-          user_id
-        FROM user_data_schema.memory_embeddings 
-        WHERE user_id = $1 
-        ORDER BY created_at DESC
-        LIMIT 100`,
-        [user.id]
-      );
-
-      memories = result.rows;
+      memories = await vectorMemory.getAllMemories(user.id);
     }
 
     return NextResponse.json({
@@ -145,41 +64,15 @@ export async function GET(request: NextRequest) {
 
   } catch (error) {
     console.error('❌ GET error:', error);
-    
-    if (error instanceof Error) {
-      if (error.message.includes('timeout') || error.message.includes('57014')) {
-        return NextResponse.json(
-          { error: 'Database query timeout - please try again' },
-          { status: 504 }
-        );
-      }
-      if (error.message.includes('Connection terminated')) {
-        return NextResponse.json(
-          { error: 'Database connection lost - please refresh' },
-          { status: 503 }
-        );
-      }
-    }
-    
     return NextResponse.json(
       { error: (error as Error).message },
       { status: 500 }
     );
-  } finally {
-    if (client) {
-      try {
-        client.release();
-      } catch (err) {
-        console.error('Error releasing client:', err);
-      }
-    }
   }
 }
 
 // ===== POST: Add memory with Gating =====
 export async function POST(request: NextRequest) {
-  let client: any = null;
-  
   try {
     const { userId: clerkUserId } = await auth();
     if (!clerkUserId) {
@@ -217,7 +110,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // ✅ STEP 1: Call Gating Service
+    // ✅ STEP 1: Call Gating Service WITH database_url
     console.log(`🛡️  Routing through Gating Service for user ${user.id}...`);
     
     let gatingData;
@@ -228,10 +121,10 @@ export async function POST(request: NextRequest) {
         body: JSON.stringify({
           user_id: user.id,
           text: content.trim(),
-          database_url: connectionString,
+          database_url: connectionString, // ← CRITICAL
           metadata: metadata || {},
         }),
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(10000), // 10s timeout
       });
 
       if (!gatingResponse.ok) {
@@ -255,6 +148,7 @@ export async function POST(request: NextRequest) {
     } catch (gatingError) {
       console.error('❌ Gating service unreachable:', gatingError);
       
+      // Fallback: treat as neutral/review
       gatingData = {
         routing: 'review',
         valence: 'neutral',
@@ -263,59 +157,31 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    // ✅ STEP 2: Add to memory_embeddings
+    // ✅ STEP 2: Data already stored in appropriate channel by gating service
+    // Good channel → stm_good
+    // Bad channel → stm_bad (with counterfactual)
+    // Review → stm_review
+
+    // ✅ STEP 3: Also add to memory_embeddings for semantic search
     const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
     
-    if (!ollamaUrl) {
-      throw new Error('OLLAMA_EXTERNAL_URL not configured');
-    }
-    
     try {
-      const pool = getPool(connectionString);
-      client = await pool.connect();
+      const vectorMemory = await getVectorMemory(connectionString, ollamaUrl);
       
       console.log(`📝 Adding to memory_embeddings for user: ${user.id}`);
-      
-      const embeddingResponse = await fetch(`${ollamaUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'nomic-embed-text',
-          prompt: content.trim(),
-        }),
-        signal: AbortSignal.timeout(15000),
+      await vectorMemory.addMemory(user.id, content.trim(), {
+        ...metadata,
+        gating_routing: gatingData.routing,
+        gating_valence: gatingData.valence,
+        gating_scores: gatingData.scores,
+        gating_timestamp: new Date().toISOString(),
       });
-
-      if (!embeddingResponse.ok) {
-        throw new Error(`Embedding generation failed: ${embeddingResponse.status}`);
-      }
-
-      const { embedding } = await embeddingResponse.json();
-      const vectorString = `[${embedding.join(',')}]`;
-
-      await client.query(
-        `INSERT INTO user_data_schema.memory_embeddings 
-         (user_id, content, embedding, metadata) 
-         VALUES ($1, $2, $3::vector, $4)`,
-        [
-          user.id,
-          content.trim(),
-          vectorString,
-          JSON.stringify({
-            ...metadata,
-            gating_routing: gatingData.routing,
-            gating_valence: gatingData.valence,
-            gating_scores: gatingData.scores,
-            gating_timestamp: new Date().toISOString(),
-          })
-        ]
-      );
-      
     } catch (embeddingError) {
       console.error('⚠️  Embedding failed (non-critical):', embeddingError);
+      // Continue even if embedding fails
     }
     
-    // ✅ STEP 3: Update counts
+    // ✅ STEP 4: Update counts based on routing
     const countUpdates: any = {};
     
     if (gatingData.routing === 'good') {
@@ -353,21 +219,11 @@ export async function POST(request: NextRequest) {
       { error: (error as Error).message },
       { status: 500 }
     );
-  } finally {
-    if (client) {
-      try {
-        client.release();
-      } catch (err) {
-        console.error('Error releasing client:', err);
-      }
-    }
   }
 }
 
 // ===== DELETE: Remove memory =====
 export async function DELETE(request: NextRequest) {
-  let client: any = null;
-  
   try {
     const { userId: clerkUserId } = await auth();
     if (!clerkUserId) {
@@ -405,19 +261,11 @@ export async function DELETE(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const pool = getPool(connectionString);
-    client = await pool.connect();
+    const ollamaUrl = process.env.OLLAMA_EXTERNAL_URL;
+    const vectorMemory = await getVectorMemory(connectionString, ollamaUrl);
 
-    const result = await client.query(
-      'DELETE FROM user_data_schema.memory_embeddings WHERE id = $1 AND user_id = $2 RETURNING id',
-      [memoryId, user.id]
-    );
-
-    if (result.rowCount === 0) {
-      return NextResponse.json({ 
-        error: 'Memory not found or access denied' 
-      }, { status: 404 });
-    }
+    // Delete with user_id verification for security
+    await vectorMemory.deleteMemory(memoryId, user.id);
 
     console.log(`✅ Memory ${memoryId} deleted for user ${user.id}`);
 
@@ -432,14 +280,6 @@ export async function DELETE(request: NextRequest) {
       { error: (error as Error).message },
       { status: 500 }
     );
-  } finally {
-    if (client) {
-      try {
-        client.release();
-      } catch (err) {
-        console.error('Error releasing client:', err);
-      }
-    }
   }
 }
 
