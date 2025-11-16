@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         timeout: 10000, // 10s timeout
       });
 
-      memories = result.rows.map(row => ({
+      memories = result.rows.map((row: any) => ({
         ...row,
         score: parseFloat(row.score),
       }));

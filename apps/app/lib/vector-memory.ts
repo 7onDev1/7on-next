@@ -138,7 +138,7 @@ export class VectorMemory {
 
       console.log(`✅ Found ${result.rows.length} memories`);
 
-      return result.rows.map(row => ({
+      return result.rows.map((row: any) => ({
         id: row.id,
         content: row.content,
         metadata: row.metadata,
