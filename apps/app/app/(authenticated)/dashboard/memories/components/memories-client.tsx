@@ -1,3 +1,4 @@
+// apps/app/app/(authenticated)/dashboard/memories/components/memories-client.tsx - IMPROVED
 "use client";
 
 import { useEffect, useState } from "react";
@@ -6,7 +7,10 @@ import { Button } from "@repo/design-system/components/ui/button";
 import { Input } from "@repo/design-system/components/ui/input";
 import { Alert, AlertDescription } from "@repo/design-system/components/ui/alert";
 import { Badge } from "@repo/design-system/components/ui/badge";
-import { Loader2, Database, AlertCircle, RefreshCw, Trash2, Clock, Search, Plus, Sparkles, CheckCircle2, Shield, AlertTriangle } from "lucide-react";
+import { 
+  Loader2, Database, AlertCircle, RefreshCw, Trash2, Clock, 
+  Search, Plus, Sparkles, CheckCircle2, Shield, AlertTriangle 
+} from "lucide-react";
 
 interface MemoriesClientProps {
   userId: string;
@@ -51,11 +55,23 @@ export function MemoriesClient({
   const checkOllamaStatus = async () => {
     try {
       setCheckingOllama(true);
+      setError(null);
+      
       const response = await fetch('/api/ollama/setup');
+      
+      if (!response.ok) {
+        throw new Error(`Failed to check Ollama: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       setOllamaStatus(data);
+      
+      if (data.status === 'unreachable' || data.status === 'offline') {
+        setError('Ollama service is not available. Please contact support.');
+      }
     } catch (err) {
       console.error('Ollama check error:', err);
+      setError('Failed to check Ollama status');
     } finally {
       setCheckingOllama(false);
     }
@@ -74,7 +90,8 @@ export function MemoriesClient({
       
       if (data.status === 'pulling') {
         setError('Models are being downloaded. This may take 2-3 minutes. Please wait...');
-        setTimeout(checkOllamaStatus, 10000);
+        // Check again after 30 seconds
+        setTimeout(checkOllamaStatus, 30000);
       } else if (data.status === 'ready') {
         setOllamaStatus(data);
         setError(null);
@@ -215,6 +232,8 @@ export function MemoriesClient({
     }
   };
 
+  // ===== Render States =====
+
   if (!mounted) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -223,20 +242,28 @@ export function MemoriesClient({
     );
   }
 
-  if (isInitialized && !hasCredential) {
+  // Project not ready
+  if (!projectStatus || projectStatus !== 'ready') {
     return (
       <div className="max-w-7xl mx-auto p-6">
-        <Card>
+        <Card className="border-yellow-200 dark:border-yellow-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-500 animate-pulse" />
-              N8N Integration Setup in Progress
+              <Clock className="h-5 w-5 text-yellow-500 animate-pulse" />
+              Project Initialization
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <p className="text-muted-foreground">✅ Database schema created successfully!</p>
-              <p className="text-muted-foreground">⏳ Waiting for N8N service to be ready...</p>
+              <p className="text-muted-foreground">
+                Your Northflank project is being initialized...
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Current status: <strong>{projectStatus || 'pending'}</strong>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                This usually takes 5-10 minutes. Please check back shortly.
+              </p>
               <Button onClick={() => window.location.reload()} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Check Status
@@ -248,28 +275,36 @@ export function MemoriesClient({
     );
   }
 
+  // Database not initialized
   if (!isInitialized) {
     return (
       <div className="max-w-7xl mx-auto p-6">
-        <Card>
+        <Card className="border-blue-200 dark:border-blue-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-yellow-500" />
-              {projectStatus === 'ready' ? 'Database Setup Required' : 'Project Initialization'}
+              <Database className="h-5 w-5 text-blue-500" />
+              Database Setup Required
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {setupError ? (
-                <p className="text-red-600">{setupError}</p>
-              ) : projectStatus === 'ready' ? (
-                <p className="text-muted-foreground">Click "Setup Database" on the dashboard to begin.</p>
+                <>
+                  <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>{setupError}</AlertDescription>
+                  </Alert>
+                  <p className="text-sm text-muted-foreground">
+                    There was an error during setup. Please try refreshing or contact support.
+                  </p>
+                </>
               ) : (
-                <p className="text-muted-foreground">Project is being created...</p>
+                <p className="text-muted-foreground">
+                  Click the "Start" button on the dashboard to initialize your semantic memory database.
+                </p>
               )}
-              <Button onClick={() => window.location.reload()} variant="outline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
+              <Button onClick={() => window.location.href = '/dashboard'} variant="outline">
+                Go to Dashboard
               </Button>
             </div>
           </CardContent>
@@ -278,6 +313,33 @@ export function MemoriesClient({
     );
   }
 
+  // Waiting for N8N credential
+  if (!hasCredential) {
+    return (
+      <div className="max-w-7xl mx-auto p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5 text-blue-500 animate-pulse" />
+              N8N Integration Setup
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <p className="text-muted-foreground">✅ Database schema created successfully!</p>
+              <p className="text-muted-foreground">⏳ Waiting for N8N credential creation...</p>
+              <Button onClick={() => window.location.reload()} variant="outline">
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Check Status
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ===== Main Interface =====
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -294,6 +356,7 @@ export function MemoriesClient({
         </Button>
       </div>
 
+      {/* Ollama Status */}
       {ollamaStatus && (
         <Card className={
           ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed
@@ -364,6 +427,7 @@ export function MemoriesClient({
         </Card>
       )}
 
+      {/* Error Display */}
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -371,6 +435,7 @@ export function MemoriesClient({
         </Alert>
       )}
 
+      {/* Gating Result */}
       {lastGatingResult && (
         <Alert className={
           lastGatingResult.routing === 'good' ? 'border-green-200 dark:border-green-800' :
@@ -420,6 +485,7 @@ export function MemoriesClient({
         </Alert>
       )}
 
+      {/* Semantic Search */}
       <Card className="border-purple-200 dark:border-purple-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -449,6 +515,7 @@ export function MemoriesClient({
         </CardContent>
       </Card>
 
+      {/* Add Memory */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -477,6 +544,7 @@ export function MemoriesClient({
         </CardContent>
       </Card>
 
+      {/* Statistics */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -510,6 +578,7 @@ export function MemoriesClient({
         </CardContent>
       </Card>
 
+      {/* Memories List */}
       <Card>
         <CardHeader>
           <CardTitle>

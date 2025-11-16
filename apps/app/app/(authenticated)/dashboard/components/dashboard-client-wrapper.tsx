@@ -204,8 +204,6 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
     projectReady: false,
   });
   const [setupLoading, setSetupLoading] = useState(false);
-
-  // 🆕 States สำหรับ disconnect
   const [disconnecting, setDisconnecting] = useState<DisconnectingState>({});
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState>({
     isOpen: false,
@@ -298,7 +296,6 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
     }
   }, [userId]);
 
-  // 🆕 ฟังก์ชัน handleDisconnect
   const handleDisconnect = async (service: string, label: string) => {
     if (!userId) {
       showToast("⚠️ You must be signed in.");
@@ -319,7 +316,6 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
       if (response.ok) {
         showToast(`✅ Successfully disconnected ${label}!`);
         
-        // Update UI immediately
         setConnectionStatus(prev => ({
           ...prev,
           [service]: 'disconnected'
@@ -329,7 +325,6 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
           [service]: null
         }));
 
-        // Refresh data
         await fetchStats();
         await fetchConnectionStatus();
       } else {
@@ -343,7 +338,6 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
     }
   };
 
-  // 🆕 ฟังก์ชันเปิด confirmation dialog
   const openDisconnectDialog = (service: string, label: string) => {
     setConfirmDialog({
       isOpen: true,
@@ -451,55 +445,68 @@ export function DashboardClientWrapper({ userId, userEmail, initialTier }: Dashb
     };
   }, [searchParams?.toString(), userId, fetchStats, fetchConnectionStatus]);
 
-const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', isLocked: boolean) => {
-  if (!userId) {
-    showToast("⚠️ You must be signed in to connect providers.");
-    return;
-  }
-  if (isLocked && isFree) {
-    showToast("🔒 Upgrade required to connect this provider.");
-    return;
-  }
-  
-  try {
-    setLoadingConnect(service);
-    
-    // 🆕 Handle OpenRouter differently
-    if (service === 'openrouter') {
-      const { generatePKCEChallenge, buildOpenRouterAuthUrl } = await import('@/lib/openrouter-oauth-client');
-      const { codeVerifier, codeChallenge } = await generatePKCEChallenge(); // เพิ่ม await
-      const authUrl = buildOpenRouterAuthUrl(userId, codeVerifier, codeChallenge);
-      window.location.href = authUrl;
+  const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', isLocked: boolean) => {
+    if (!userId) {
+      showToast("⚠️ You must be signed in to connect providers.");
+      return;
+    }
+    if (isLocked && isFree) {
+      showToast("🔒 Upgrade required to connect this provider.");
       return;
     }
     
-    // Existing Auth0 flow for other services
-    const state = createOAuthState(userId, service);
-    const authUrl = buildAuthorizationUrl(service, state);
-    window.location.href = authUrl;
-  } catch (err) {
-    console.error('❌ OAuth Connection Error:', err);
-    showToast("⚠️ Failed to start connection. Try again.");
-    setLoadingConnect(null);
-  }
-};
+    try {
+      setLoadingConnect(service);
+      
+      if (service === 'openrouter') {
+        const { generatePKCEChallenge, buildOpenRouterAuthUrl } = await import('@/lib/openrouter-oauth-client');
+        const { codeVerifier, codeChallenge } = await generatePKCEChallenge();
+        const authUrl = buildOpenRouterAuthUrl(userId, codeVerifier, codeChallenge);
+        window.location.href = authUrl;
+        return;
+      }
+      
+      const state = createOAuthState(userId, service);
+      const authUrl = buildAuthorizationUrl(service, state);
+      window.location.href = authUrl;
+    } catch (err) {
+      console.error('❌ OAuth Connection Error:', err);
+      showToast("⚠️ Failed to start connection. Try again.");
+      setLoadingConnect(null);
+    }
+  };
 
+  // ✅ FIX: เพิ่ม handleMemorySetup ที่ทำงานได้จริง
   const handleMemorySetup = async () => {
     if (!userId) return;
     
     setSetupLoading(true);
+    console.log('🚀 Starting memory setup...');
+    
     try {
       const response = await fetch('/api/memories/setup', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
       });
       
       const data = await response.json();
       
+      console.log('Setup response:', data);
+      
       if (response.ok) {
         showToast('✅ Database setup completed!');
+        
+        // Refresh status
         await fetchStats();
+        
+        // Wait a bit for status to propagate
+        setTimeout(async () => {
+          await fetchStats();
+        }, 2000);
       } else {
-        showToast(`❌ Setup failed: ${data.error}`);
+        const errorMsg = data.error || data.details || 'Setup failed';
+        console.error('Setup failed:', errorMsg);
+        showToast(`❌ Setup failed: ${errorMsg}`);
       }
     } catch (error) {
       console.error('Setup error:', error);
@@ -547,15 +554,19 @@ const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', is
                       disabled={memoryButtonDisabled}
                       className="relative w-20 h-20 rounded-full bg-gradient-to-br from-slate-200/30 to-slate-300/30 dark:from-slate-700/30 dark:to-slate-800/30 backdrop-blur-sm border border-slate-300/40 dark:border-slate-600/40 shadow-lg shadow-slate-400/20 dark:shadow-slate-900/40 hover:shadow-2xl hover:shadow-slate-400/40 dark:hover:shadow-slate-900/60 transition-all duration-300 hover:scale-110 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     >
-                      <div className={`w-5 h-5 rounded-full ${
-                        setupLoading 
-                          ? 'bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.6),0_0_20px_rgba(234,179,8,0.3)]' 
-                          : 'bg-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.6),0_0_20px_rgba(249,115,22,0.3)]'
-                      }`}>
-                        {setupLoading && (
-                          <div className="absolute inset-0 rounded-full bg-yellow-500 animate-ping opacity-75" />
-                        )}
-                      </div>
+                      {setupLoading ? (
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                      ) : (
+                        <div className={`w-5 h-5 rounded-full ${
+                          setupLoading 
+                            ? 'bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.6),0_0_20px_rgba(234,179,8,0.3)]' 
+                            : 'bg-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.6),0_0_20px_rgba(249,115,22,0.3)]'
+                        }`}>
+                          {setupLoading && (
+                            <div className="absolute inset-0 rounded-full bg-yellow-500 animate-ping opacity-75" />
+                          )}
+                        </div>
+                      )}
                       <div className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-300/30 to-slate-400/30 dark:from-slate-600/30 dark:to-slate-700/30 blur-md -z-10" />
                     </button>
                     <span className="block text-center mt-2 text-xs font-medium text-slate-700 dark:text-slate-300">
@@ -583,7 +594,7 @@ const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', is
               </div>
             </div>
 
-            {/* Card 2: Available Integrations - UPDATED with Disconnect */}
+            {/* Card 2: Available Integrations */}
             <div className="p-6 rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] transition-all hover:bg-white/40 dark:hover:bg-white/8">
               <h3 className="text-slate-800 dark:text-slate-200 text-lg font-bold mb-6">Available Integrations</h3>
 
@@ -617,7 +628,6 @@ const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', is
                           <>
                             <ConnectionStatusIndicator status={status} error={error} />
                             
-                            {/* 🆕 Connect/Disconnect Button */}
                             {isConnected ? (
                               <button
                                 onClick={() => openDisconnectDialog(service, label)}
@@ -683,7 +693,7 @@ const handleConnect = async (service: keyof typeof CLIENT_IDS | 'openrouter', is
             )}
           </div>
 
-          {/* 🆕 Confirmation Dialog */}
+          {/* Confirmation Dialog */}
           {confirmDialog.isOpen && (
             <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
               <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
