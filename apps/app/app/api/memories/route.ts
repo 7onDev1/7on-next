@@ -6,7 +6,7 @@ import { getVectorMemory } from '@/lib/vector-memory';
 import { Client } from 'pg';
 
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
-const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://gating-service.internal:8080';
+const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'https://sun--gating-service--lrnpwmyyyl8p.code.run:8080';
 
 // ===== GET: Fetch memories (all or semantic search) =====
 export async function GET(request: NextRequest) {

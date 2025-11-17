@@ -11,7 +11,7 @@ import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
 import { generateResponse, approveForConsolidation } from '@/lib/complete-inference';
 
-const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://localhost:8080';
+const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'https://sun--gating-service--lrnpwmyyyl8p.code.run:8080';
 const OLLAMA_EXTERNAL_URL = process.env.OLLAMA_EXTERNAL_URL!;
 
 // ===== POST /api/ai/chat - Main chat endpoint =====

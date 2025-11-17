@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from "@repo/design-system/components/ui/alert
 import { Badge } from "@repo/design-system/components/ui/badge";
 import { 
   Loader2, Database, AlertCircle, RefreshCw, Trash2, Clock, 
-  Search, Plus, Sparkles, CheckCircle2, Shield, AlertTriangle 
+  Search, Plus, Sparkles, CheckCircle2, Shield, AlertTriangle, Brain, Zap, Eye, TrendingUp 
 } from "lucide-react";
 
 interface MemoriesClientProps {
@@ -39,6 +39,8 @@ export function MemoriesClient({
   const [checkingOllama, setCheckingOllama] = useState(false);
   const [lastGatingResult, setLastGatingResult] = useState<any>(null);
   const [adding, setAdding] = useState(false);
+  const [stats, setStats] = useState({ good: 0, bad: 0, review: 0, total: 0 });
+  const [selectedChannel, setSelectedChannel] = useState<string>('all');
 
   useEffect(() => {
     setMounted(true);
@@ -118,8 +120,21 @@ export function MemoriesClient({
       }
       
       const data = await response.json();
-      setMemories(data.memories || []);
+      const memoriesList = data.memories || [];
+      setMemories(memoriesList);
       setSearchMode('all');
+      
+      // Calculate stats
+      const goodCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'good').length;
+      const badCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'bad').length;
+      const reviewCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'review').length;
+      
+      setStats({
+        good: goodCount,
+        bad: badCount,
+        review: reviewCount,
+        total: memoriesList.length
+      });
     } catch (err) {
       console.error('Error fetching memories:', err);
       setError((err as Error).message);
@@ -232,7 +247,6 @@ export function MemoriesClient({
     }
   };
 
-  // ✅ FIX: Safe date formatter
   const formatDate = (dateString: string | Date) => {
     if (!mounted) return '';
     try {
@@ -242,171 +256,237 @@ export function MemoriesClient({
     }
   };
 
+  const getChannelIcon = (channel: string) => {
+    switch(channel) {
+      case 'good': return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+      case 'bad': return <Shield className="w-4 h-4 text-red-400" />;
+      case 'review': return <AlertTriangle className="w-4 h-4 text-amber-400" />;
+      default: return <Brain className="w-4 h-4 text-purple-400" />;
+    }
+  };
+
+  const getChannelColor = (channel: string) => {
+    switch(channel) {
+      case 'good': return 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30';
+      case 'bad': return 'from-red-500/20 to-orange-500/20 border-red-500/30';
+      case 'review': return 'from-amber-500/20 to-yellow-500/20 border-amber-500/30';
+      default: return 'from-purple-500/20 to-indigo-500/20 border-purple-500/30';
+    }
+  };
+
+  const filteredMemories = selectedChannel === 'all'
+    ? memories
+    : memories.filter(m => m.metadata?.gating_routing === selectedChannel);
+
   if (!mounted) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950">
+        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
       </div>
     );
   }
 
   if (!projectStatus || projectStatus !== 'ready') {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card className="border-yellow-200 dark:border-yellow-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-yellow-500 animate-pulse" />
-              Project Initialization
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-muted-foreground">
-                Your Northflank project is being initialized...
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-300">
+                <Clock className="h-5 w-5 animate-pulse" />
+                Project Initialization
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-slate-300">Your Northflank project is being initialized...</p>
+              <p className="text-sm text-slate-400">
+                Current status: <strong className="text-amber-300">{projectStatus || 'pending'}</strong>
               </p>
-              <p className="text-sm text-muted-foreground">
-                Current status: <strong>{projectStatus || 'pending'}</strong>
-              </p>
-              <Button onClick={() => window.location.reload()} variant="outline">
+              <Button onClick={() => window.location.reload()} variant="outline" className="border-amber-500/50">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Check Status
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   if (!isInitialized) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card className="border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-blue-500" />
-              Database Setup Required
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="border-blue-500/30 bg-blue-500/5 backdrop-blur-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-300">
+                <Database className="h-5 w-5" />
+                Database Setup Required
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               {setupError ? (
                 <>
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertDescription>{setupError}</AlertDescription>
                   </Alert>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-slate-400">
                     There was an error during setup. Please try refreshing or contact support.
                   </p>
                 </>
               ) : (
-                <p className="text-muted-foreground">
+                <p className="text-slate-300">
                   Click the "Start" button on the dashboard to initialize your semantic memory database.
                 </p>
               )}
               <Button onClick={() => window.location.href = '/dashboard'} variant="outline">
                 Go to Dashboard
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   if (!hasCredential) {
     return (
-      <div className="max-w-7xl mx-auto p-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-blue-500 animate-pulse" />
-              N8N Integration Setup
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <p className="text-muted-foreground">✅ Database schema created successfully!</p>
-              <p className="text-muted-foreground">⏳ Waiting for N8N credential creation...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 p-6">
+        <div className="max-w-4xl mx-auto">
+          <Card className="border-blue-500/30 bg-blue-500/5 backdrop-blur-xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-300">
+                <Clock className="h-5 w-5 animate-pulse" />
+                N8N Integration Setup
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-slate-300">✅ Database schema created successfully!</p>
+              <p className="text-slate-300">⏳ Waiting for N8N credential creation...</p>
               <Button onClick={() => window.location.reload()} variant="outline">
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Check Status
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Sparkles className="h-8 w-8 text-purple-500" />
-            Semantic Memories
-          </h1>
-          <p className="text-muted-foreground">AI-powered memory with Ollama + pgvector</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-purple-500/10 via-indigo-500/10 to-blue-500/10 border border-purple-500/20 p-8 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
+          <div className="relative flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-indigo-500/20 backdrop-blur-xl border border-purple-500/30">
+                  <Sparkles className="w-8 h-8 text-purple-300" />
+                </div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-200 via-indigo-200 to-blue-200 bg-clip-text text-transparent">
+                  Neural Memory Matrix
+                </h1>
+              </div>
+              <p className="text-slate-400 ml-16">AI-powered semantic memory with multi-channel processing</p>
+            </div>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={fetchAllMemories}
+                disabled={loading}
+                className="px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 transition backdrop-blur-xl"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              </button>
+              <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 backdrop-blur-xl">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span className="text-sm font-semibold text-emerald-300">{stats.total} Vectors</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <Button onClick={fetchAllMemories} disabled={loading}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-          Refresh
-        </Button>
-      </div>
 
-      {ollamaStatus && (
-        <Card className={
-          ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed
-            ? 'border-green-200 dark:border-green-800'
-            : 'border-yellow-200 dark:border-yellow-800'
-        }>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              {ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed ? (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              ) : (
-                <AlertCircle className="h-5 w-5 text-yellow-500" />
-              )}
-              Ollama Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Total', value: stats.total, icon: Database, color: 'purple', channel: 'all' },
+            { label: 'Good Channel', value: stats.good, icon: CheckCircle2, color: 'emerald', channel: 'good' },
+            { label: 'Bad Channel', value: stats.bad, icon: Shield, color: 'red', channel: 'bad' },
+            { label: 'Review Queue', value: stats.review, icon: AlertTriangle, color: 'amber', channel: 'review' }
+          ].map((stat, i) => (
+            <button
+              key={i}
+              onClick={() => setSelectedChannel(stat.channel)}
+              className={`relative overflow-hidden rounded-2xl p-6 backdrop-blur-xl border transition-all ${
+                selectedChannel === stat.channel
+                  ? `bg-${stat.color}-500/20 border-${stat.color}-500/50 scale-105`
+                  : `bg-slate-900/50 border-slate-700/50 hover:border-${stat.color}-500/30`
+              }`}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-sm">Service:</span>
-                <span className={`font-semibold ${
-                  ollamaStatus.status === 'online' ? 'text-green-600' : 'text-yellow-600'
-                }`}>
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">{stat.label}</p>
+                  <p className="text-3xl font-bold">{stat.value}</p>
+                </div>
+                <stat.icon className="w-8 h-8 opacity-50" />
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Ollama Status */}
+        {ollamaStatus && (
+          <Card className={`border-2 ${
+            ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed
+              ? 'border-emerald-500/30 bg-emerald-500/5'
+              : 'border-amber-500/30 bg-amber-500/5'
+          } backdrop-blur-xl`}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {ollamaStatus.status === 'online' && ollamaStatus.hasNomicEmbed ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-400" />
+                )}
+                <span className="text-slate-200">Ollama Status</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-400">Service:</span>
+                <Badge variant={ollamaStatus.status === 'online' ? 'default' : 'secondary'}>
                   {ollamaStatus.status}
-                </span>
+                </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">nomic-embed-text:</span>
-                <span className={`font-semibold ${
-                  ollamaStatus.hasNomicEmbed ? 'text-green-600' : 'text-red-600'
-                }`}>
+                <span className="text-sm text-slate-400">nomic-embed-text:</span>
+                <Badge variant={ollamaStatus.hasNomicEmbed ? 'default' : 'destructive'}>
                   {ollamaStatus.hasNomicEmbed ? '✅ Ready' : '❌ Missing'}
-                </span>
+                </Badge>
               </div>
               
               {!ollamaStatus.hasNomicEmbed && (
-                <Alert className="mt-4">
+                <Alert className="bg-amber-500/10 border-amber-500/30">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
+                  <AlertDescription className="text-sm text-slate-300">
                     The embedding model needs to be downloaded (2-3 minutes)
                   </AlertDescription>
                 </Alert>
               )}
               
-              <div className="flex gap-2 mt-4">
+              <div className="flex gap-2 pt-2">
                 <Button 
                   onClick={checkOllamaStatus} 
                   disabled={checkingOllama}
                   variant="outline"
                   size="sm"
+                  className="border-slate-600"
                 >
                   {checkingOllama ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Check Status'}
                 </Button>
@@ -416,207 +496,237 @@ export function MemoriesClient({
                     onClick={setupOllama} 
                     disabled={checkingOllama}
                     size="sm"
+                    className="bg-gradient-to-r from-purple-500 to-indigo-500"
                   >
                     {checkingOllama ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     Pull Models
                   </Button>
                 )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        )}
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className="border-red-500/30 bg-red-500/5 backdrop-blur-xl">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
 
-      {lastGatingResult && (
-        <Alert className={
-          lastGatingResult.routing === 'good' ? 'border-green-200 dark:border-green-800' :
-          lastGatingResult.routing === 'bad' ? 'border-red-200 dark:border-red-800' :
-          'border-yellow-200 dark:border-yellow-800'
-        }>
-          <div className="flex items-start gap-3">
-            {lastGatingResult.routing === 'good' && <CheckCircle2 className="h-5 w-5 text-green-600" />}
-            {lastGatingResult.routing === 'bad' && <Shield className="h-5 w-5 text-red-600" />}
-            {lastGatingResult.routing === 'review' && <AlertTriangle className="h-5 w-5 text-yellow-600" />}
-            
-            <div className="flex-1">
-              <div className="font-semibold">Content Moderation Result</div>
-              <div className="text-sm mt-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant={
-                    lastGatingResult.routing === 'good' ? 'default' :
-                    lastGatingResult.routing === 'bad' ? 'destructive' :
-                    'secondary'
-                  }>
+        {/* Gating Result */}
+        {lastGatingResult && (
+          <div className={`rounded-2xl p-6 backdrop-blur-xl border ${
+            lastGatingResult.routing === 'good' 
+              ? 'bg-emerald-500/10 border-emerald-500/30'
+              : lastGatingResult.routing === 'bad'
+              ? 'bg-red-500/10 border-red-500/30'
+              : 'bg-amber-500/10 border-amber-500/30'
+          }`}>
+            <div className="flex items-start gap-4">
+              <div className="p-2 rounded-xl bg-white/5">
+                {getChannelIcon(lastGatingResult.routing)}
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold mb-2 text-slate-200">Content Moderation Result</h3>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Badge className="bg-white/10">
                     {lastGatingResult.routing.toUpperCase()} Channel
                   </Badge>
-                  <Badge variant="outline">Valence: {lastGatingResult.valence}</Badge>
-                  {lastGatingResult.scores && (
-                    <Badge variant="outline">
+                  <Badge variant="outline" className="border-white/20">
+                    Valence: {lastGatingResult.valence}
+                  </Badge>
+                  {lastGatingResult.scores?.alignment !== undefined && (
+                    <Badge variant="outline" className="border-white/20">
                       Alignment: {(lastGatingResult.scores.alignment * 100).toFixed(0)}%
                     </Badge>
                   )}
                 </div>
                 
                 {lastGatingResult.safe_counterfactual && (
-                  <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded text-xs">
-                    <strong>Safe Alternative:</strong> {lastGatingResult.safe_counterfactual}
+                  <div className="mt-3 p-3 bg-red-500/10 rounded-lg text-sm border border-red-500/20">
+                    <strong className="text-red-300">Safe Alternative:</strong>{' '}
+                    <span className="text-slate-300">{lastGatingResult.safe_counterfactual}</span>
                   </div>
                 )}
               </div>
+              <button 
+                onClick={() => setLastGatingResult(null)} 
+                className="p-2 hover:bg-white/5 rounded-lg transition text-slate-400 hover:text-slate-200"
+              >
+                ×
+              </button>
             </div>
-            
-            <Button 
-              variant="ghost" 
-              size="sm"
-              onClick={() => setLastGatingResult(null)}
-            >
-              ×
-            </Button>
           </div>
-        </Alert>
-      )}
+        )}
 
-      <Card className="border-purple-200 dark:border-purple-800">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Search className="h-5 w-5 text-purple-500" />
-            Semantic Search
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
+        {/* Search */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 p-6 backdrop-blur-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <Search className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-semibold text-slate-200">Semantic Search</h2>
+          </div>
+          <div className="flex gap-3">
             <Input
-              placeholder="Search by meaning..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSemanticSearch()}
-              className="flex-1"
+              placeholder="Search by meaning, not just keywords..."
               disabled={!ollamaStatus?.hasNomicEmbed || loading}
+              className="flex-1 bg-slate-900/50 border-slate-700/50 focus:border-indigo-500/50 text-slate-200 placeholder:text-slate-500"
             />
-            <Button 
-              onClick={handleSemanticSearch} 
-              disabled={loading || !ollamaStatus?.hasNomicEmbed} 
-              className="bg-purple-600 hover:bg-purple-700"
+            <Button
+              onClick={handleSemanticSearch}
+              disabled={loading || !ollamaStatus?.hasNomicEmbed}
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">🧠 AI understands meaning</p>
-        </CardContent>
-      </Card>
+          <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+            <Brain className="w-4 h-4" />
+            AI understands context and intent, not just exact words
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Plus className="h-5 w-5" />
-            Add New Memory
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex gap-2">
+        {/* Add Memory */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-6 backdrop-blur-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <Plus className="w-5 h-5 text-purple-400" />
+            <h2 className="text-xl font-semibold text-slate-200">Add New Memory</h2>
+          </div>
+          <div className="flex gap-3">
             <Input
-              placeholder="Type something to remember..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
-              className="flex-1"
+              placeholder="Type something to remember..."
               disabled={!ollamaStatus?.hasNomicEmbed || adding}
+              className="flex-1 bg-slate-900/50 border-slate-700/50 focus:border-purple-500/50 text-slate-200 placeholder:text-slate-500"
             />
-            <Button 
-              onClick={handleAddMemory} 
+            <Button
+              onClick={handleAddMemory}
               disabled={adding || !newMessage.trim() || !ollamaStatus?.hasNomicEmbed}
+              className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             >
-              {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              {adding ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Add
+                </>
+              )}
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">🤖 Converted to vectors + Content Gating</p>
-        </CardContent>
-      </Card>
+          <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            Content will be analyzed and routed through multi-channel gating
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {searchMode === 'semantic' && searchQuery 
-              ? `Results for "${searchQuery}"` 
-              : 'All Memories'}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : memories.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <Database className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="font-semibold">
-                {searchMode === 'semantic' ? 'No matching memories found' : 'No memories yet'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {memories.map((memory) => (
-                <div
-                  key={memory.id}
-                  className="p-4 border rounded-lg hover:bg-muted/50 transition"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm break-words font-medium">{memory.content}</p>
-                      
-                      {memory.metadata?.gating_routing && (
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                          <Badge variant={
-                            memory.metadata.gating_routing === 'good' ? 'default' :
-                            memory.metadata.gating_routing === 'bad' ? 'destructive' :
-                            'secondary'
-                          } className="text-xs">
-                            {memory.metadata.gating_routing}
-                          </Badge>
-                        </div>
-                      )}
-                      
-                      {memory.score !== undefined && (
-                        <div className="mt-2 inline-flex items-center gap-2 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 rounded text-xs">
-                          <Sparkles className="h-3 w-3" />
-                          <span className="font-semibold">Similarity:</span>
-                          <span>{(memory.score * 100).toFixed(1)}%</span>
-                        </div>
-                      )}
-                      
-                      <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatDate(memory.created_at)}</span>
+        {/* Memories List */}
+        <div className="rounded-2xl bg-slate-900/50 border border-slate-700/50 backdrop-blur-xl overflow-hidden">
+          <div className="p-6 border-b border-slate-700/50">
+            <h2 className="text-xl font-semibold flex items-center gap-2 text-slate-200">
+              <Eye className="w-5 h-5" />
+              {selectedChannel === 'all' 
+                ? 'All Memories' 
+                : `${selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)} Channel`}
+            </h2>
+          </div>
+          
+          <div className="divide-y divide-slate-700/50">
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+              </div>
+            ) : filteredMemories.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No memories in this channel yet</p>
+              </div>
+            ) : (
+              filteredMemories.map((memory) => {
+                const channel = memory.metadata?.gating_routing || 'unknown';
+                return (
+                  <div
+                    key={memory.id}
+                    className="p-6 hover:bg-slate-800/30 transition group"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className={`p-3 rounded-xl bg-gradient-to-br ${getChannelColor(channel)} backdrop-blur-xl border`}>
+                        {getChannelIcon(channel)}
                       </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base mb-3 text-slate-200">{memory.content}</p>
+                        
+                        {memory.score !== undefined && (
+                          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 mb-3">
+                            <TrendingUp className="w-4 h-4 text-purple-400" />
+                            <span className="text-sm font-semibold text-purple-300">
+                              Similarity: {(memory.score * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        )}
+                        
+                        {memory.metadata && (
+                          <div className="flex items-center gap-2 flex-wrap mb-3">
+                            {memory.metadata.gating_routing && (
+                              <Badge variant="outline" className="text-xs border-white/20">
+                                {memory.metadata.gating_routing}
+                              </Badge>
+                            )}
+                            {memory.metadata.gating_valence && (
+                              <Badge variant="outline" className="text-xs border-white/20">
+                                {memory.metadata.gating_valence}
+                              </Badge>
+                            )}
+                            {memory.metadata.gating_scores?.alignment !== undefined && (
+                              <Badge variant="outline" className="text-xs border-white/20">
+                                Alignment: {(memory.metadata.gating_scores.alignment * 100).toFixed(0)}%
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center gap-2 text-xs text-slate-500">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatDate(memory.created_at)}</span>
+                          <span className="mx-2">•</span>
+                          <span className="font-mono text-xs text-slate-600">
+                            ID: {memory.id?.toString().slice(0, 8)}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(memory.id)}
+                        disabled={deleting === memory.id}
+                        className="opacity-0 group-hover:opacity-100 transition hover:bg-red-500/10"
+                      >
+                        {deleting === memory.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin text-red-400" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-red-400" />
+                        )}
+                      </Button>
                     </div>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(memory.id)}
-                      disabled={deleting === memory.id}
-                      className="flex-shrink-0"
-                    >
-                      {deleting === memory.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
-                      )}
-                    </Button>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+      </div>
     </div>
   );
 }
