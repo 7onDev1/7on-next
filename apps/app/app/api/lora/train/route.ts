@@ -392,52 +392,7 @@ function startBackgroundMonitoring(
 }
 
 // ===== GET: Status =====
-export async function GET(request: NextRequest) {
-  try {
-    const { userId: clerkUserId } = await auth();
-    
-    if (!clerkUserId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const user = await db.user.findUnique({
-      where: { clerkId: clerkUserId },
-      select: {
-        loraTrainingStatus: true,
-        loraAdapterVersion: true,
-        loraLastTrainedAt: true,
-        loraTrainingError: true,
-        goodChannelCount: true,
-        badChannelCount: true,
-        mclChainCount: true,
-      },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    return NextResponse.json({
-      status: user.loraTrainingStatus || 'idle',
-      currentVersion: user.loraAdapterVersion,
-      lastTrainedAt: user.loraLastTrainedAt,
-      error: user.loraTrainingError,
-      stats: {
-        goodChannel: user.goodChannelCount,
-        badChannel: user.badChannelCount,
-        mclChains: user.mclChainCount,
-        total: user.goodChannelCount + user.badChannelCount + user.mclChainCount,
-      },
-    });
-
-  } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
-  }
-}
-
+// ✅ เพิ่มใน GET function (ประมาณบรรทัดที่ 350-400)
 export async function GET(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
