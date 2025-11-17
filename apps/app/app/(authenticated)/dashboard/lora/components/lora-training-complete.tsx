@@ -6,10 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@repo/design-system/co
 import { Button } from "@repo/design-system/components/ui/button";
 import { Alert, AlertDescription } from "@repo/design-system/components/ui/alert";
 import { Progress } from "@repo/design-system/components/ui/progress";
+import { Badge } from "@repo/design-system/components/ui/badge";
 import { 
   Loader2, Sparkles, AlertCircle, CheckCircle2, 
-  Clock, Zap, Database, TrendingUp, Shield, Brain, RefreshCw 
+  Clock, Zap, Database, TrendingUp, Shield, Brain, RefreshCw,
+  ArrowRight, Eye, AlertTriangle
 } from "lucide-react";
+import Link from "next/link";
 
 interface TrainingStatus {
   status: string;
@@ -25,6 +28,7 @@ interface TrainingStatus {
     goodChannel: number;
     badChannel: number;
     mclChains: number;
+    reviewQueue: number;
     total: number;
   };
 }
@@ -112,7 +116,7 @@ export function LoraTrainingComplete({ user }: { user: User }) {
   };
 
   const startTraining = async () => {
-    if (!confirm('Start LoRA fine-tuning? This will train a personalized model using your conversation data.\n\nEstimated time: 10-30 minutes')) {
+    if (!confirm('Start LoRA fine-tuning?\n\nThis will train a personalized model using your conversation data.\n\nEstimated time: 10-30 minutes')) {
       return;
     }
 
@@ -168,7 +172,13 @@ export function LoraTrainingComplete({ user }: { user: User }) {
     }
   };
 
-  const totalData = user.goodChannelCount + user.badChannelCount + user.mclChainCount;
+  // ✅ FIX: Calculate total from ALL channels
+  const totalData = status?.stats?.total || (
+    user.goodChannelCount + 
+    user.badChannelCount + 
+    user.mclChainCount
+  );
+  
   const canTrain = user.postgresSchemaInitialized && totalData >= 10;
   const isTraining = status?.status === 'training' || user.loraTrainingStatus === 'training';
 
@@ -179,340 +189,406 @@ export function LoraTrainingComplete({ user }: { user: User }) {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold flex items-center gap-2">
-          <Zap className="h-8 w-8 text-yellow-500" />
-          LoRA Fine-Tuning
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Personalize your AI model with your conversation patterns
-        </p>
-      </div>
-
-      {!user.postgresSchemaInitialized && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Database setup required. Please set up your database first from the dashboard.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Card className={
-        isTraining ? 'border-blue-500 shadow-lg' :
-        status?.status === 'completed' ? 'border-green-500' :
-        status?.status === 'failed' ? 'border-red-500' :
-        ''
-      }>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            {isTraining && (
-              <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
-            )}
-            {status?.status === 'completed' && (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            )}
-            {status?.status === 'failed' && (
-              <AlertCircle className="h-5 w-5 text-red-500" />
-            )}
-            Training Status
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <p className="text-lg font-semibold capitalize">
-                  {status?.status || user.loraTrainingStatus || 'idle'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Version</p>
-                <p className="text-lg font-semibold">
-                  {status?.currentVersion || user.loraAdapterVersion || 'None'}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Last Trained</p>
-                <p className="text-sm">
-                  {formatDate(status?.lastTrainedAt || user.loraLastTrainedAt)}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Dataset Size</p>
-                <p className="text-lg font-semibold">
-                  {status?.stats?.total || totalData}
-                </p>
-              </div>
-            </div>
-
-            {isTraining && (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Training Progress</span>
-                  <span className="font-semibold">{progress}%</span>
-                </div>
-                <Progress value={progress} className="h-2" />
-                <p className="text-xs text-muted-foreground text-center">
-                  🧠 Fine-tuning model... This may take 10-30 minutes
-                </p>
-              </div>
-            )}
-
-            {(status?.error || user.loraTrainingError) && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  {status?.error || user.loraTrainingError}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {status?.status === 'completed' && (
-              <Alert className="border-green-200 dark:border-green-800">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                <AlertDescription className="text-green-600 dark:text-green-400">
-                  ✅ Training completed! Your personalized model is ready to use.
-                </AlertDescription>
-              </Alert>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-blue-500" />
-              Training Data Composition
-            </div>
-            <Button
-              onClick={syncCounts}
-              disabled={syncing || loading}
-              variant="outline"
-              size="sm"
-            >
-              {syncing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              <span className="ml-2">Sync</span>
-            </Button>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-green-50 dark:bg-green-900/10 rounded-lg">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
-                <div>
-                  <p className="font-medium">Good Channel</p>
-                  <p className="text-xs text-muted-foreground">Positive interactions</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-green-600">
-                  {status?.stats?.goodChannel || user.goodChannelCount}
-                </p>
-                <p className="text-xs text-muted-foreground">samples</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-orange-50 dark:bg-orange-900/10 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-orange-600" />
-                <div>
-                  <p className="font-medium">Bad Channel (Safety)</p>
-                  <p className="text-xs text-muted-foreground">With safe counterfactuals</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-orange-600">
-                  {status?.stats?.badChannel || user.badChannelCount}
-                </p>
-                <p className="text-xs text-muted-foreground">samples</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg">
-              <div className="flex items-center gap-2">
-                <Brain className="h-5 w-5 text-purple-600" />
-                <div>
-                  <p className="font-medium">Moral Context Layer</p>
-                  <p className="text-xs text-muted-foreground">Complex reasoning chains</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-purple-600">
-                  {status?.stats?.mclChains || user.mclChainCount}
-                </p>
-                <p className="text-xs text-muted-foreground">chains</p>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t">
-              <div className="flex items-center justify-between">
-                <p className="font-semibold">Total Training Data</p>
-                <p className="text-3xl font-bold">
-                  {status?.stats?.total || totalData}
-                </p>
-              </div>
-              {totalData < 10 && (
-                <p className="text-xs text-red-600 mt-2">
-                  ⚠️ Need at least 10 samples to start training (current: {totalData})
-                </p>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-purple-500" />
-            How LoRA Fine-Tuning Works
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-xs font-bold">
-                1
-              </div>
-              <div>
-                <p className="font-medium">Data Collection & Approval</p>
-                <p className="text-muted-foreground">
-                  System automatically approves high-quality conversations and safe counterfactuals
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-xs font-bold">
-                2
-              </div>
-              <div>
-                <p className="font-medium">LoRA Training</p>
-                <p className="text-muted-foreground">
-                  Creates a lightweight adapter (~10MB) without modifying the base model
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center text-xs font-bold">
-                3
-              </div>
-              <div>
-                <p className="font-medium">Automatic Deployment</p>
-                <p className="text-muted-foreground">
-                  Adapter is loaded into Ollama and ready for personalized responses
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-950 text-white p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 border border-amber-500/20 p-8 backdrop-blur-xl">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]" />
+          <div className="relative flex items-center justify-between">
             <div>
-              <p className="font-medium">Ready to Train?</p>
-              <p className="text-sm text-muted-foreground">
-                {canTrain 
-                  ? 'Your data is ready for training'
-                  : totalData < 10
-                  ? `Collect ${10 - totalData} more samples to start training`
-                  : 'Complete database setup first'
-                }
-              </p>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 backdrop-blur-xl border border-amber-500/30">
+                  <Zap className="w-8 h-8 text-amber-300" />
+                </div>
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-amber-200 via-orange-200 to-red-200 bg-clip-text text-transparent">
+                  LoRA Fine-Tuning
+                </h1>
+              </div>
+              <p className="text-slate-400 ml-16">Personalize your AI model with your conversation patterns</p>
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button
-                onClick={startTraining}
-                disabled={!canTrain || training || isTraining || loading}
-                size="lg"
-                className="flex-1 sm:flex-none"
-              >
-                {training || isTraining ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Training...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Start Training
-                  </>
-                )}
+            <Link href="/dashboard/memories">
+              <Button variant="outline" className="border-purple-500/50 hover:bg-purple-500/10">
+                <Eye className="w-4 h-4 mr-2" />
+                View Memories
               </Button>
-              
+            </Link>
+          </div>
+        </div>
+
+        {/* Database Status Warning */}
+        {!user.postgresSchemaInitialized && (
+          <Alert variant="destructive" className="border-red-500/30 bg-red-500/5 backdrop-blur-xl">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-slate-200">
+              Database setup required. Please set up your database first from the{' '}
+              <Link href="/dashboard/memories" className="underline font-semibold">
+                Memories page
+              </Link>
+              .
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Training Status Card */}
+        <Card className={`border-2 ${
+          isTraining ? 'border-blue-500/50 shadow-lg shadow-blue-500/20' :
+          status?.status === 'completed' ? 'border-emerald-500/50 shadow-lg shadow-emerald-500/20' :
+          status?.status === 'failed' ? 'border-red-500/50 shadow-lg shadow-red-500/20' :
+          'border-slate-700/50'
+        } bg-slate-900/50 backdrop-blur-xl`}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-200">
+              {isTraining && <Loader2 className="h-5 w-5 animate-spin text-blue-400" />}
+              {status?.status === 'completed' && <CheckCircle2 className="h-5 w-5 text-emerald-400" />}
+              {status?.status === 'failed' && <AlertCircle className="h-5 w-5 text-red-400" />}
+              Training Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Status</p>
+                  <Badge variant={
+                    isTraining ? 'default' :
+                    status?.status === 'completed' ? 'default' :
+                    status?.status === 'failed' ? 'destructive' :
+                    'secondary'
+                  } className="text-base capitalize">
+                    {status?.status || user.loraTrainingStatus || 'idle'}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Version</p>
+                  <p className="text-lg font-semibold text-slate-200">
+                    {status?.currentVersion || user.loraAdapterVersion || 'None'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Last Trained</p>
+                  <p className="text-sm text-slate-300">
+                    {formatDate(status?.lastTrainedAt || user.loraLastTrainedAt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-400 mb-1">Dataset Size</p>
+                  <p className="text-lg font-semibold text-slate-200">
+                    {totalData} samples
+                  </p>
+                </div>
+              </div>
+
               {isTraining && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Training Progress</span>
+                    <span className="font-semibold text-slate-200">{progress}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2 bg-slate-700" />
+                  <p className="text-xs text-slate-400 text-center flex items-center justify-center gap-2">
+                    <Brain className="w-4 h-4" />
+                    Fine-tuning model... This may take 10-30 minutes
+                  </p>
+                </div>
+              )}
+
+              {(status?.error || user.loraTrainingError) && (
+                <Alert variant="destructive" className="border-red-500/30 bg-red-500/5">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {status?.error || user.loraTrainingError}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {status?.status === 'completed' && (
+                <Alert className="border-emerald-500/30 bg-emerald-500/5">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  <AlertDescription className="text-emerald-300">
+                    ✅ Training completed! Your personalized model is ready to use.
+                  </AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Data Composition */}
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-xl">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-slate-200">
+                <Database className="h-5 w-5 text-blue-400" />
+                Training Data Composition
+              </CardTitle>
+              <Button
+                onClick={syncCounts}
+                disabled={syncing || loading}
+                variant="outline"
+                size="sm"
+                className="border-slate-600"
+              >
+                {syncing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-2">Sync</span>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Good Channel */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-emerald-500/10 to-teal-500/10 rounded-xl border border-emerald-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-emerald-500/20">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Good Channel</p>
+                    <p className="text-xs text-slate-400">High-quality conversations</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-emerald-400">
+                    {status?.stats?.goodChannel ?? user.goodChannelCount}
+                  </p>
+                  <p className="text-xs text-slate-400">samples</p>
+                </div>
+              </div>
+
+              {/* Bad Channel */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-red-500/10 to-orange-500/10 rounded-xl border border-red-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-500/20">
+                    <Shield className="h-5 w-5 text-red-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Bad Channel (Safety)</p>
+                    <p className="text-xs text-slate-400">With safe counterfactuals</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-red-400">
+                    {status?.stats?.badChannel ?? user.badChannelCount}
+                  </p>
+                  <p className="text-xs text-slate-400">samples</p>
+                </div>
+              </div>
+
+              {/* MCL Chains */}
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 rounded-xl border border-purple-500/30">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-500/20">
+                    <Brain className="h-5 w-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-200">Moral Context Layer</p>
+                    <p className="text-xs text-slate-400">Complex reasoning chains</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-3xl font-bold text-purple-400">
+                    {status?.stats?.mclChains ?? user.mclChainCount}
+                  </p>
+                  <p className="text-xs text-slate-400">chains</p>
+                </div>
+              </div>
+
+              {/* Review Queue */}
+              {(status?.stats?.reviewQueue ?? 0) > 0 && (
+                <div className="flex items-center justify-between p-4 bg-gradient-to-r from-amber-500/10 to-yellow-500/10 rounded-xl border border-amber-500/30">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-500/20">
+                      <AlertTriangle className="h-5 w-5 text-amber-400" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-200">Review Queue</p>
+                      <p className="text-xs text-slate-400">Pending moderation</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold text-amber-400">
+                      {status?.stats?.reviewQueue ?? 0}
+                    </p>
+                    <p className="text-xs text-slate-400">samples</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Total */}
+              <div className="pt-4 border-t border-slate-700/50">
+                <div className="flex items-center justify-between">
+                  <p className="font-semibold text-slate-200">Total Training Data</p>
+                  <p className="text-4xl font-bold text-slate-200">
+                    {totalData}
+                  </p>
+                </div>
+                {totalData < 10 && (
+                  <Alert className="mt-3 border-amber-500/30 bg-amber-500/5">
+                    <AlertTriangle className="h-4 w-4 text-amber-400" />
+                    <AlertDescription className="text-amber-300">
+                      ⚠️ Need at least 10 samples to start training (current: {totalData})
+                      <Link href="/dashboard/memories" className="block mt-2 underline font-semibold">
+                        → Add more memories
+                      </Link>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* How It Works */}
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-slate-200">
+              <Sparkles className="h-5 w-5 text-purple-400" />
+              How LoRA Fine-Tuning Works
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4 text-sm">
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-sm font-bold text-purple-300">
+                  1
+                </div>
+                <div>
+                  <p className="font-medium text-slate-200">Data Collection & Gating</p>
+                  <p className="text-slate-400">
+                    System automatically routes conversations through multi-channel gating to separate good, bad, and morally complex interactions
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-sm font-bold text-purple-300">
+                  2
+                </div>
+                <div>
+                  <p className="font-medium text-slate-200">LoRA Training</p>
+                  <p className="text-slate-400">
+                    Creates a lightweight adapter (~10MB) that personalizes the base model without modifying its core weights
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-sm font-bold text-purple-300">
+                  3
+                </div>
+                <div>
+                  <p className="font-medium text-slate-200">Automatic Deployment</p>
+                  <p className="text-slate-400">
+                    Adapter is automatically loaded into Ollama and ready for personalized AI responses in your workflows
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <Card className="border-slate-700/50 bg-slate-900/50 backdrop-blur-xl">
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <p className="font-medium text-slate-200">Ready to Train?</p>
+                <p className="text-sm text-slate-400">
+                  {canTrain 
+                    ? 'Your data is ready for training'
+                    : totalData < 10
+                    ? `Collect ${10 - totalData} more samples to start training`
+                    : 'Complete database setup first'
+                  }
+                </p>
+              </div>
+              <div className="flex gap-2 w-full sm:w-auto">
                 <Button
-                  onClick={cancelTraining}
-                  disabled={cancelling || loading}
+                  onClick={startTraining}
+                  disabled={!canTrain || training || isTraining || loading}
                   size="lg"
-                  variant="destructive"
-                  className="flex-1 sm:flex-none"
+                  className="flex-1 sm:flex-none bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600"
                 >
-                  {cancelling ? (
+                  {training || isTraining ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Cancelling...
+                      Training...
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="h-4 w-4 mr-2" />
-                      Cancel
+                      <Zap className="h-4 w-4 mr-2" />
+                      Start Training
                     </>
                   )}
                 </Button>
-              )}
+                
+                {isTraining && (
+                  <Button
+                    onClick={cancelTraining}
+                    disabled={cancelling || loading}
+                    size="lg"
+                    variant="destructive"
+                    className="flex-1 sm:flex-none"
+                  >
+                    {cancelling ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Cancelling...
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-4 w-4 mr-2" />
+                        Cancel
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            Technical Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4 text-xs">
-            <div>
-              <p className="text-muted-foreground">Base Model</p>
-              <p className="font-semibold">Mistral 7B</p>
+        {/* Technical Details */}
+        <Card className="border-dashed border-slate-700/50 bg-slate-900/30 backdrop-blur-xl">
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2 text-slate-300">
+              <TrendingUp className="h-4 w-4" />
+              Technical Details
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+              <div>
+                <p className="text-slate-400 mb-1">Base Model</p>
+                <p className="font-semibold text-slate-200">TinyLlama 1.1B</p>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">LoRA Rank</p>
+                <p className="font-semibold text-slate-200">r=8</p>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Training Time</p>
+                <p className="font-semibold text-slate-200">10-30 min</p>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Adapter Size</p>
+                <p className="font-semibold text-slate-200">~10MB</p>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Data Mixing</p>
+                <p className="font-semibold text-slate-200">Multi-channel</p>
+              </div>
+              <div>
+                <p className="text-slate-400 mb-1">Infrastructure</p>
+                <p className="font-semibold text-slate-200">Northflank Jobs</p>
+              </div>
             </div>
-            <div>
-              <p className="text-muted-foreground">LoRA Rank</p>
-              <p className="font-semibold">r=8</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Training Time</p>
-              <p className="font-semibold">10-30 min</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Adapter Size</p>
-              <p className="font-semibold">~10MB</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Data Mixing</p>
-              <p className="font-semibold">40% good / 30% safe / 30% MCL</p>
-            </div>
-            <div>
-              <p className="text-muted-foreground">Infrastructure</p>
-              <p className="font-semibold">Northflank Jobs</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+      </div>
     </div>
   );
 }

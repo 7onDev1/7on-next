@@ -438,6 +438,85 @@ export async function GET(request: NextRequest) {
   }
 }
 
+export async function GET(request: NextRequest) {
+  try {
+    const { userId: clerkUserId } = await auth();
+    
+    if (!clerkUserId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await db.user.findUnique({
+      where: { clerkId: clerkUserId },
+      select: {
+        id: true,
+        northflankProjectId: true,
+        loraTrainingStatus: true,
+        loraAdapterVersion: true,
+        loraLastTrainedAt: true,
+        loraTrainingError: true,
+        goodChannelCount: true,
+        badChannelCount: true,
+        mclChainCount: true,
+        postgresSchemaInitialized: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    }
+
+    // ✅ FIX: Get review count from database
+    let reviewCount = 0;
+    
+    if (user.northflankProjectId && user.postgresSchemaInitialized) {
+      try {
+        const connectionString = await getPostgresConnectionString(user.northflankProjectId);
+        
+        if (connectionString) {
+          const { Client } = require('pg');
+          const client = new Client({ connectionString });
+          await client.connect();
+          
+          try {
+            const result = await client.query(`
+              SELECT COUNT(*) as count 
+              FROM user_data_schema.stm_review 
+              WHERE user_id = $1
+            `, [user.id]);
+            
+            reviewCount = parseInt(result.rows[0]?.count || '0');
+          } finally {
+            await client.end();
+          }
+        }
+      } catch (error) {
+        console.error('Error getting review count:', error);
+      }
+    }
+
+    return NextResponse.json({
+      status: user.loraTrainingStatus || 'idle',
+      currentVersion: user.loraAdapterVersion,
+      lastTrainedAt: user.loraLastTrainedAt,
+      error: user.loraTrainingError,
+      stats: {
+        goodChannel: user.goodChannelCount,
+        badChannel: user.badChannelCount,
+        mclChains: user.mclChainCount,
+        reviewQueue: reviewCount, // ✅ เพิ่ม Review count
+        total: user.goodChannelCount + user.badChannelCount + user.mclChainCount + reviewCount, // ✅ รวม Review
+      },
+    });
+
+  } catch (error) {
+    return NextResponse.json(
+      { error: (error as Error).message },
+      { status: 500 }
+    );
+  }
+}
+
 // ===== DELETE: Cancel =====
 export async function DELETE(request: NextRequest) {
   try {

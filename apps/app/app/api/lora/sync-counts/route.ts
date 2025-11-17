@@ -1,4 +1,4 @@
-// apps/app/app/api/lora/sync-counts/route.ts - FIXED: Count from correct tables
+// apps/app/app/api/lora/sync-counts/route.ts - FIXED: Include Review Queue
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
@@ -43,30 +43,30 @@ export async function POST(request: NextRequest) {
     try {
       console.log(`📊 Syncing counts for user: ${user.id}`);
 
-      // ✅ Count from correct channel tables
+      // ✅ Count from ALL channel tables
       
-      // 1. Good Channel (stm_good only - approved data)
+      // 1. Good Channel
       const goodResult = await client.query(`
         SELECT COUNT(*) as count 
         FROM user_data_schema.stm_good 
         WHERE user_id = $1
       `, [user.id]);
 
-      // 2. Bad Channel (stm_bad only - flagged content with counterfactuals)
+      // 2. Bad Channel
       const badResult = await client.query(`
         SELECT COUNT(*) as count 
         FROM user_data_schema.stm_bad 
         WHERE user_id = $1
       `, [user.id]);
 
-      // 3. MCL Chains (moral reasoning chains)
+      // 3. MCL Chains
       const mclResult = await client.query(`
         SELECT COUNT(*) as count 
         FROM user_data_schema.mcl_chains 
         WHERE user_id = $1
       `, [user.id]);
 
-      // 4. Review Queue (content pending review)
+      // 4. Review Queue (✅ NEW - นับด้วย!)
       const reviewResult = await client.query(`
         SELECT COUNT(*) as count 
         FROM user_data_schema.stm_review 
@@ -95,40 +95,7 @@ export async function POST(request: NextRequest) {
         memory_embeddings: memoryCount,
       });
 
-      // ✅ Get approved counts for training
-      const approvedGoodResult = await client.query(`
-        SELECT COUNT(*) as count 
-        FROM user_data_schema.stm_good 
-        WHERE user_id = $1 
-          AND approved_for_consolidation = TRUE
-      `, [user.id]);
-
-      const approvedBadResult = await client.query(`
-        SELECT COUNT(*) as count 
-        FROM user_data_schema.stm_bad 
-        WHERE user_id = $1 
-          AND approved_for_shadow_learning = TRUE
-          AND safe_counterfactual IS NOT NULL
-      `, [user.id]);
-
-      const approvedMclResult = await client.query(`
-        SELECT COUNT(*) as count 
-        FROM user_data_schema.mcl_chains 
-        WHERE user_id = $1 
-          AND approved_for_training = TRUE
-      `, [user.id]);
-
-      const approvedGood = parseInt(approvedGoodResult.rows[0]?.count || '0');
-      const approvedBad = parseInt(approvedBadResult.rows[0]?.count || '0');
-      const approvedMcl = parseInt(approvedMclResult.rows[0]?.count || '0');
-
-      console.log('✅ Approved counts:', {
-        good: approvedGood,
-        bad: approvedBad,
-        mcl: approvedMcl,
-      });
-
-      // Update Prisma database with TOTAL counts (not just approved)
+      // Update Prisma database
       await db.user.update({
         where: { id: user.id },
         data: {
@@ -149,15 +116,9 @@ export async function POST(request: NextRequest) {
           mclChains: mclCount,
           reviewQueue: reviewCount,
           memoryEmbeddings: memoryCount,
-          total: goodCount + badCount + mclCount,
+          total: goodCount + badCount + mclCount + reviewCount, // ✅ รวม Review ด้วย
         },
-        approved: {
-          good: approvedGood,
-          bad: approvedBad,
-          mcl: approvedMcl,
-          total: approvedGood + approvedBad + approvedMcl,
-        },
-        message: `Synced ${goodCount + badCount + mclCount} total records`,
+        message: `Synced ${goodCount + badCount + mclCount + reviewCount} total records`,
       });
 
     } finally {
