@@ -106,11 +106,11 @@ export async function POST(request: NextRequest) {
     
     try {
       const { initializeEthicalGrowthSchema } = await import('@/lib/postgres-setup');
-
-const schemaSuccess = await initializeEthicalGrowthSchema(
-  postgresConnection.connectionString,
-  adminConnection?.connectionString
-);
+      
+      const schemaSuccess = await initializeEthicalGrowthSchema(
+        postgresConnection.connectionString,
+        postgresConnection.adminConnectionString
+      );
       
       if (!schemaSuccess) {
         throw new Error('Schema initialization returned false');
