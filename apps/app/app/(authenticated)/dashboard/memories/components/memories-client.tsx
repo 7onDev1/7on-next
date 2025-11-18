@@ -1,4 +1,5 @@
 // apps/app/app/(authenticated)/dashboard/memories/components/memories-client.tsx
+// ✅ FIXED: Auto-refresh หลัง add memory
 "use client";
 
 import { useEffect, useState } from "react";
@@ -132,13 +133,13 @@ export function MemoriesClient({
       const stats = {
         total: memoriesList.length,
         good: memoriesList.filter((m: any) => 
-          m.metadata?.classification === 'growth_memory'
+          m.metadata?.classification === 'growth_memory' || m.classification === 'growth_memory'
         ).length,
         bad: memoriesList.filter((m: any) => 
-          m.metadata?.classification === 'challenge_memory'
+          m.metadata?.classification === 'challenge_memory' || m.classification === 'challenge_memory'
         ).length,
         review: memoriesList.filter((m: any) => 
-          m.metadata?.classification === 'neutral_interaction'
+          m.metadata?.classification === 'neutral_interaction' || m.classification === 'neutral_interaction'
         ).length,
       };
       
@@ -226,8 +227,14 @@ export function MemoriesClient({
         
         setNewMessage('');
         
-        // Refresh list
+        // ✅ FIX: Auto-refresh list หลัง add
+        console.log('🔄 Refreshing memories list...');
         await fetchAllMemories();
+        console.log('✅ Memories list refreshed!');
+        
+        // ✅ Optional: Scroll to top เพื่อเห็น memory ใหม่
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        
       } else {
         throw new Error(data.error || 'Failed to add memory');
       }
@@ -253,7 +260,12 @@ export function MemoriesClient({
         throw new Error('Failed to delete memory');
       }
       
+      // ✅ FIX: Remove from local state immediately + refresh
       setMemories(prev => prev.filter(m => m.id !== memoryId));
+      
+      // Optional: Refresh to ensure consistency
+      await fetchAllMemories();
+      
     } catch (err) {
       console.error('Error deleting memory:', err);
       alert('Failed to delete memory');
@@ -291,9 +303,14 @@ export function MemoriesClient({
     }
   };
 
+  // ✅ FIX: ดึง classification จากทั้ง 2 sources
+  const getClassification = (memory: any) => {
+    return memory.classification || memory.metadata?.classification || 'neutral_interaction';
+  };
+
   const filteredMemories = selectedChannel === 'all'
     ? memories
-    : memories.filter(m => m.metadata?.classification === selectedChannel);
+    : memories.filter(m => getClassification(m) === selectedChannel);
 
   if (!mounted) {
     return (
@@ -580,35 +597,6 @@ export function MemoriesClient({
           </div>
         )}
 
-        {/* Search */}
-        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 p-6 backdrop-blur-xl">
-          <div className="flex items-center gap-3 mb-4">
-            <Search className="w-5 h-5 text-indigo-400" />
-            <h2 className="text-xl font-semibold text-slate-200">Semantic Search</h2>
-          </div>
-          <div className="flex gap-3">
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSemanticSearch()}
-              placeholder="Search by meaning, not just keywords..."
-              disabled={!ollamaStatus?.hasNomicEmbed || loading}
-              className="flex-1 bg-slate-900/50 border-slate-700/50 focus:border-indigo-500/50 text-slate-200 placeholder:text-slate-500"
-            />
-            <Button
-              onClick={handleSemanticSearch}
-              disabled={loading || !ollamaStatus?.hasNomicEmbed}
-              className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-            </Button>
-          </div>
-          <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
-            <Brain className="w-4 h-4" />
-            AI understands context and intent, not just exact words
-          </p>
-        </div>
-
         {/* Add Memory */}
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 p-6 backdrop-blur-xl">
           <div className="flex items-center gap-3 mb-4">
@@ -643,6 +631,35 @@ export function MemoriesClient({
             </Button>
           </div>
           <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
+            <Brain className="w-4 h-4" />
+            AI understands context and intent, not just exact words
+          </p>
+        </div>
+
+        {/* Search */}
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border border-indigo-500/30 p-6 backdrop-blur-xl">
+          <div className="flex items-center gap-3 mb-4">
+            <Search className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-semibold text-slate-200">Semantic Search</h2>
+          </div>
+          <div className="flex gap-3">
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSemanticSearch()}
+              placeholder="Search by meaning, not just keywords..."
+              disabled={!ollamaStatus?.hasNomicEmbed || loading}
+              className="flex-1 bg-slate-900/50 border-slate-700/50 focus:border-indigo-500/50 text-slate-200 placeholder:text-slate-500"
+            />
+            <Button
+              onClick={handleSemanticSearch}
+              disabled={loading || !ollamaStatus?.hasNomicEmbed}
+              className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+            </Button>
+          </div>
+          <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
             <Shield className="w-4 h-4" />
             Content will be analyzed through ethical growth framework
           </p>
@@ -657,6 +674,9 @@ export function MemoriesClient({
                 ? 'All Memories' 
                 : `${selectedChannel.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Memories`}
             </h2>
+            <p className="text-sm text-slate-400 mt-1">
+              Showing {filteredMemories.length} of {memories.length} total memories
+            </p>
           </div>
           
           <div className="divide-y divide-slate-700/50">
@@ -668,10 +688,11 @@ export function MemoriesClient({
               <div className="text-center py-12 text-slate-400">
                 <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p>No memories in this category yet</p>
+                <p className="text-sm mt-2">Add your first memory above!</p>
               </div>
             ) : (
               filteredMemories.map((memory) => {
-                const classification = memory.metadata?.classification || 'neutral_interaction';
+                const classification = getClassification(memory);
                 return (
                   <div
                     key={memory.id}
@@ -694,23 +715,44 @@ export function MemoriesClient({
                           </div>
                         )}
                         
-                        {memory.metadata && (
-                          <div className="flex items-center gap-2 flex-wrap mb-3">
-                            {memory.metadata.classification && (
-                              <Badge variant="outline" className="text-xs border-white/20 capitalize">
-                                {memory.metadata.classification.replace('_', ' ')}
-                              </Badge>
-                            )}
-                            {memory.metadata.language && (
-                              <Badge variant="outline" className="text-xs border-white/20 uppercase">
-                                {memory.metadata.language}
-                              </Badge>
-                            )}
-                            {memory.metadata.growth_stage && (
-                              <Badge variant="outline" className="text-xs border-white/20">
-                                Stage {memory.metadata.growth_stage}/5
-                              </Badge>
-                            )}
+                        <div className="flex items-center gap-2 flex-wrap mb-3">
+                          <Badge variant="outline" className="text-xs border-white/20 capitalize">
+                            {classification.replace('_', ' ')}
+                          </Badge>
+                          {memory.metadata?.language && (
+                            <Badge variant="outline" className="text-xs border-white/20 uppercase">
+                              {memory.metadata.language}
+                            </Badge>
+                          )}
+                          {(memory.metadata?.growth_stage || memory.ethical_scores) && (
+                            <Badge variant="outline" className="text-xs border-white/20">
+                              Stage {memory.metadata?.growth_stage || '2'}/5
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {memory.ethical_scores && (
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3 text-xs">
+                            {Object.entries(memory.ethical_scores).slice(0, 4).map(([key, value]: [string, any]) => (
+                              <div key={key} className="bg-slate-800/50 rounded px-2 py-1">
+                                <span className="text-slate-400 capitalize">{key.replace('_', ' ')}:</span>
+                                <span className="text-slate-200 ml-1 font-semibold">{Math.round(value * 100)}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {memory.gentle_guidance && (
+                          <div className="mb-3 p-3 bg-blue-500/10 rounded-lg text-sm border border-blue-500/20">
+                            <strong className="text-blue-300">💭 Guidance:</strong>{' '}
+                            <span className="text-slate-300">{memory.gentle_guidance}</span>
+                          </div>
+                        )}
+                        
+                        {memory.reflection_prompt && (
+                          <div className="mb-3 p-3 bg-purple-500/10 rounded-lg text-sm border border-purple-500/20">
+                            <strong className="text-purple-300">🤔 Reflection:</strong>{' '}
+                            <span className="text-slate-300">{memory.reflection_prompt}</span>
                           </div>
                         )}
                         
