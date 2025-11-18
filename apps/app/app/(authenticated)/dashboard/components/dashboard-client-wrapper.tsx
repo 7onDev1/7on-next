@@ -4,12 +4,22 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@repo/design-system/components/ui/button";
-import { Github, Linkedin, Sparkles, Loader2, Check, Database, AlertCircle, Brain, LayoutDashboard, Settings } from "lucide-react";
+import { 
+  Github, 
+  Linkedin, 
+  Sparkles, 
+  Loader2, 
+  Check, 
+  Database, 
+  AlertCircle, 
+  Brain,
+  LayoutDashboard,
+  Settings
+} from "lucide-react";
 import { useSubscription } from "@repo/auth/hooks/use-subscription";
 import type { SubscriptionTier } from "@repo/auth/client";
 import { GL } from "@/components/gl";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/design-system/components/ui/tabs";
-import { LayoutDashboard, Sparkles as SparklesIcon, Brain as BrainIcon, Settings } from "lucide-react";
 import EthicalProfileDashboard from "./ethical-profile-dashboard";
 import MemoriesListEthical from "./memories-list-ethical";
 

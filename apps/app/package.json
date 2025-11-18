@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^5.0.0",
+    "@huggingface/inference": "^4.13.3",
     "@paper-design/shaders-react": "^0.0.60",
     "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-slot": "^1.2.3",
