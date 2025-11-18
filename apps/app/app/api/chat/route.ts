@@ -354,7 +354,19 @@ async function generateEmbedding(text: string): Promise<number[]> {
       model: 'sentence-transformers/all-MiniLM-L6-v2',
       inputs: text,
     });
-    return Array.isArray(result) ? result : Array.from(result as any);
+    
+    // Handle different output types from HuggingFace
+    if (Array.isArray(result)) {
+      // If result is already an array of numbers
+      if (typeof result[0] === 'number') {
+        return result as number[];
+      }
+      // If result is nested array, flatten it
+      return result.flat() as number[];
+    }
+    
+    // Fallback: convert to array
+    return Array.from(result as any);
   } catch (error) {
     console.error('Embedding generation error:', error);
     return new Array(384).fill(0);
