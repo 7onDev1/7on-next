@@ -105,12 +105,12 @@ export async function POST(request: NextRequest) {
     console.log('📝 Step 2: Initializing database schema...');
     
     try {
-      const { initializeUserPostgresSchema } = await import('@/lib/postgres-setup');
-      
-      const schemaSuccess = await initializeUserPostgresSchema(
-        postgresConnection.connectionString,
-        postgresConnection.adminConnectionString
-      );
+      const { initializeEthicalGrowthSchema } = await import('@/lib/postgres-setup');
+
+const schemaSuccess = await initializeEthicalGrowthSchema(
+  postgresConnection.connectionString,
+  adminConnection?.connectionString
+);
       
       if (!schemaSuccess) {
         throw new Error('Schema initialization returned false');

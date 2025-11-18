@@ -787,12 +787,12 @@ async function monitorN8nDeployment(
             console.log('✅ Postgres connection retrieved');
 
             console.log('📝 Initializing Postgres schema with pgvector (768-dim)...');
-            const { initializeUserPostgresSchema } = await import('@/lib/postgres-setup');
-            
-            const schemaSuccess = await initializeUserPostgresSchema(
-              postgresConnection.connectionString,
-              postgresConnection.adminConnectionString
-            );
+const { initializeEthicalGrowthSchema } = await import('@/lib/postgres-setup');
+
+const schemaSuccess = await initializeEthicalGrowthSchema(
+  postgresConnection.connectionString,
+  adminConnection?.connectionString
+);
 
             if (!schemaSuccess) {
               throw new Error('Failed to initialize Postgres schema');
