@@ -1,4 +1,4 @@
-// apps/app/app/api/memories/route.ts - ETHICAL GROWTH VERSION
+// apps/app/app/api/memories/route.ts - FIXED VERSION
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
@@ -7,7 +7,7 @@ import { Client } from 'pg';
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
 const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://localhost:8080';
 
-// ===== POST: Add Memory (with Ethical Gating) =====
+// ===== POST: Add Memory =====
 export async function POST(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -39,14 +39,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not initialized' }, { status: 400 });
     }
 
-    // Get Postgres connection
     const connectionString = await getPostgresConnectionString(user.northflankProjectId);
     
     if (!connectionString) {
       throw new Error('Cannot get database connection');
     }
 
-    // ✅ Call Ethical Gating Service
+    console.log('📝 Sending to gating service...');
+
+    // ✅ Call Gating Service (will create embedding and save to memory_embeddings)
     const gatingResponse = await fetch(`${GATING_SERVICE_URL}/gating/ethical-route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -59,19 +60,18 @@ export async function POST(request: NextRequest) {
     });
 
     if (!gatingResponse.ok) {
-      throw new Error(`Gating service error: ${gatingResponse.statusText}`);
+      const errorText = await gatingResponse.text();
+      throw new Error(`Gating service error: ${errorText}`);
     }
 
     const gatingResult = await gatingResponse.json();
 
-    console.log('📊 Gating result:', {
+    console.log('✅ Gating result:', {
       classification: gatingResult.routing,
       stage: gatingResult.growth_stage,
       language: gatingResult.detected_language,
     });
 
-    // Memory already saved by gating service
-    // Return enriched response
     return NextResponse.json({
       success: true,
       classification: gatingResult.routing,
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ===== GET: List Memories =====
+// ===== GET: List Memories - FIXED VERSION =====
 export async function GET(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -104,7 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const classification = searchParams.get('classification'); // growth_memory, challenge_memory, etc.
+    const query = searchParams.get('query'); // For semantic search
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -132,40 +132,70 @@ export async function GET(request: NextRequest) {
     try {
       await client.connect();
       
-      // Get memories with optional classification filter
-      const whereClause = classification 
-        ? `AND classification = $2`
-        : '';
-      
-      const params = classification
-        ? [user.id, classification, limit, offset]
-        : [user.id, limit, offset];
-      
-      const result = await client.query(`
-        SELECT 
-          id,
-          text,
-          classification,
-          ethical_scores,
-          moments,
-          reflection_prompt,
-          gentle_guidance,
-          approved_for_training,
-          training_weight,
-          metadata,
-          created_at
-        FROM user_data_schema.interaction_memories
-        WHERE user_id = $1 ${whereClause}
-        ORDER BY created_at DESC
-        LIMIT $${classification ? 3 : 2} OFFSET $${classification ? 4 : 3}
-      `, params);
+      let memories = [];
+
+      if (query) {
+        // ✅ SEMANTIC SEARCH: Query from memory_embeddings with vector similarity
+        console.log(`🔍 Semantic search: "${query}"`);
+        
+        // Generate embedding for query (you'll need Ollama running)
+        const OLLAMA_URL = process.env.OLLAMA_EXTERNAL_URL!;
+        const embeddingResponse = await fetch(`${OLLAMA_URL}/api/embeddings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: 'nomic-embed-text',
+            prompt: query,
+          }),
+        });
+
+        if (!embeddingResponse.ok) {
+          throw new Error('Embedding generation failed');
+        }
+
+        const embeddingData = await embeddingResponse.json();
+        const queryEmbedding = embeddingData.embedding;
+        const vectorString = `[${queryEmbedding.join(',')}]`;
+
+        const result = await client.query(`
+          SELECT 
+            me.id::text as id,
+            me.content as text,
+            me.metadata,
+            me.created_at,
+            1 - (me.embedding <=> $1::vector) as score
+          FROM user_data_schema.memory_embeddings me
+          WHERE me.user_id = $2
+          ORDER BY me.embedding <=> $1::vector
+          LIMIT $3 OFFSET $4
+        `, [vectorString, user.id, limit, offset]);
+
+        memories = result.rows;
+      } else {
+        // ✅ LIST ALL: Query from memory_embeddings
+        console.log('📋 Listing all memories');
+        
+        const result = await client.query(`
+          SELECT 
+            me.id::text as id,
+            me.content as text,
+            me.metadata,
+            me.created_at
+          FROM user_data_schema.memory_embeddings me
+          WHERE me.user_id = $1
+          ORDER BY me.created_at DESC
+          LIMIT $2 OFFSET $3
+        `, [user.id, limit, offset]);
+
+        memories = result.rows;
+      }
       
       // Get total count
       const countResult = await client.query(`
         SELECT COUNT(*) as total
-        FROM user_data_schema.interaction_memories
-        WHERE user_id = $1 ${whereClause}
-      `, classification ? [user.id, classification] : [user.id]);
+        FROM user_data_schema.memory_embeddings
+        WHERE user_id = $1
+      `, [user.id]);
       
       // Get ethical profile
       const profileResult = await client.query(`
@@ -185,7 +215,7 @@ export async function GET(request: NextRequest) {
       `, [user.id]);
       
       return NextResponse.json({
-        memories: result.rows,
+        memories: memories,
         total: parseInt(countResult.rows[0]?.total || '0'),
         limit,
         offset,
@@ -205,7 +235,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ===== DELETE: Remove Memory =====
+// ===== DELETE: Remove Memory - FIXED VERSION =====
 export async function DELETE(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -244,75 +274,15 @@ export async function DELETE(request: NextRequest) {
     try {
       await client.connect();
       
+      // ✅ Delete from memory_embeddings
       await client.query(`
-        DELETE FROM user_data_schema.interaction_memories
+        DELETE FROM user_data_schema.memory_embeddings
         WHERE id = $1 AND user_id = $2
       `, [memoryId, user.id]);
       
       return NextResponse.json({
         success: true,
         message: 'Memory deleted',
-      });
-      
-    } finally {
-      await client.end();
-    }
-
-  } catch (error) {
-    return NextResponse.json(
-      { error: (error as Error).message },
-      { status: 500 }
-    );
-  }
-}
-
-// ===== PATCH: Update Memory Approval Status =====
-export async function PATCH(request: NextRequest) {
-  try {
-    const { userId: clerkUserId } = await auth();
-    
-    if (!clerkUserId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const { memoryId, approved } = await request.json();
-
-    if (!memoryId || typeof approved !== 'boolean') {
-      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
-    }
-
-    const user = await db.user.findUnique({
-      where: { clerkId: clerkUserId },
-      select: {
-        id: true,
-        northflankProjectId: true,
-      },
-    });
-
-    if (!user?.northflankProjectId) {
-      return NextResponse.json({ error: 'Project not found' }, { status: 400 });
-    }
-
-    const connectionString = await getPostgresConnectionString(user.northflankProjectId);
-    
-    if (!connectionString) {
-      throw new Error('Cannot get database connection');
-    }
-
-    const client = new Client({ connectionString });
-    
-    try {
-      await client.connect();
-      
-      await client.query(`
-        UPDATE user_data_schema.interaction_memories
-        SET approved_for_training = $1, updated_at = NOW()
-        WHERE id = $2 AND user_id = $3
-      `, [approved, memoryId, user.id]);
-      
-      return NextResponse.json({
-        success: true,
-        message: `Memory ${approved ? 'approved' : 'unapproved'} for training`,
       });
       
     } finally {
