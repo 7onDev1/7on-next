@@ -37,10 +37,10 @@ export function MemoriesClient({
   const [searchMode, setSearchMode] = useState<'all' | 'semantic'>('all');
   const [ollamaStatus, setOllamaStatus] = useState<any>(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
-  const [lastGatingResult, setLastGatingResult] = useState<any>(null);
   const [adding, setAdding] = useState(false);
   const [stats, setStats] = useState({ good: 0, bad: 0, review: 0, total: 0 });
   const [selectedChannel, setSelectedChannel] = useState<string>('all');
+  const [lastGatingResult, setLastGatingResult] = useState<any>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -112,6 +112,8 @@ export function MemoriesClient({
       setLoading(true);
       setError(null);
       
+      console.log('📋 Fetching all memories...');
+      
       const response = await fetch('/api/memories');
       
       if (!response.ok) {
@@ -120,23 +122,30 @@ export function MemoriesClient({
       }
       
       const data = await response.json();
+      console.log('✅ Fetched data:', data);
+      
       const memoriesList = data.memories || [];
       setMemories(memoriesList);
       setSearchMode('all');
       
-      // Calculate stats
-      const goodCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'good').length;
-      const badCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'bad').length;
-      const reviewCount = memoriesList.filter((m: any) => m.metadata?.gating_routing === 'review').length;
+      // Calculate stats from metadata
+      const stats = {
+        total: memoriesList.length,
+        good: memoriesList.filter((m: any) => 
+          m.metadata?.classification === 'growth_memory'
+        ).length,
+        bad: memoriesList.filter((m: any) => 
+          m.metadata?.classification === 'challenge_memory'
+        ).length,
+        review: memoriesList.filter((m: any) => 
+          m.metadata?.classification === 'neutral_interaction'
+        ).length,
+      };
       
-      setStats({
-        good: goodCount,
-        bad: badCount,
-        review: reviewCount,
-        total: memoriesList.length
-      });
+      setStats(stats);
+      
     } catch (err) {
-      console.error('Error fetching memories:', err);
+      console.error('❌ Error fetching memories:', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);
@@ -152,6 +161,8 @@ export function MemoriesClient({
     setLoading(true);
     setError(null);
     try {
+      console.log(`🔍 Semantic search: "${searchQuery}"`);
+      
       const response = await fetch(`/api/memories?query=${encodeURIComponent(searchQuery)}`);
       
       if (!response.ok) {
@@ -161,14 +172,15 @@ export function MemoriesClient({
       
       const data = await response.json();
       
-      if (data.success) {
-        setMemories(data.memories || []);
+      if (data.memories) {
+        setMemories(data.memories);
         setSearchMode('semantic');
+        console.log(`✅ Found ${data.memories.length} results`);
       } else {
-        throw new Error(data.error || 'Search failed');
+        throw new Error('Invalid response format');
       }
     } catch (err) {
-      console.error('Search error:', err);
+      console.error('❌ Search error:', err);
       setError((err as Error).message);
     } finally {
       setLoading(false);
@@ -183,11 +195,13 @@ export function MemoriesClient({
     setLastGatingResult(null);
     
     try {
+      console.log('📝 Adding memory:', newMessage);
+      
       const response = await fetch('/api/memories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: newMessage,
+          text: newMessage,
           metadata: {},
         }),
       });
@@ -198,26 +212,27 @@ export function MemoriesClient({
       }
 
       const data = await response.json();
+      console.log('✅ Add memory result:', data);
       
       if (data.success) {
         setLastGatingResult({
-          routing: data.routing,
-          valence: data.valence,
-          scores: data.scores,
-          safe_counterfactual: data.safe_counterfactual,
+          classification: data.classification,
+          ethical_scores: data.ethical_scores,
+          growth_stage: data.growth_stage,
+          moments: data.moments,
+          reflection_prompt: data.reflection_prompt,
+          gentle_guidance: data.gentle_guidance,
         });
         
         setNewMessage('');
-        if (searchMode === 'semantic' && searchQuery) {
-          await handleSemanticSearch();
-        } else {
-          await fetchAllMemories();
-        }
+        
+        // Refresh list
+        await fetchAllMemories();
       } else {
         throw new Error(data.error || 'Failed to add memory');
       }
     } catch (err) {
-      console.error('Add error:', err);
+      console.error('❌ Add error:', err);
       setError((err as Error).message);
     } finally {
       setAdding(false);
@@ -256,27 +271,29 @@ export function MemoriesClient({
     }
   };
 
-  const getChannelIcon = (channel: string) => {
-    switch(channel) {
-      case 'good': return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
-      case 'bad': return <Shield className="w-4 h-4 text-red-400" />;
-      case 'review': return <AlertTriangle className="w-4 h-4 text-amber-400" />;
-      default: return <Brain className="w-4 h-4 text-purple-400" />;
+  const getChannelIcon = (classification: string) => {
+    switch(classification) {
+      case 'growth_memory': return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
+      case 'challenge_memory': return <Shield className="w-4 h-4 text-red-400" />;
+      case 'wisdom_moment': return <Brain className="w-4 h-4 text-purple-400" />;
+      case 'needs_support': return <AlertTriangle className="w-4 h-4 text-orange-400" />;
+      default: return <Brain className="w-4 h-4 text-gray-400" />;
     }
   };
 
-  const getChannelColor = (channel: string) => {
-    switch(channel) {
-      case 'good': return 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30';
-      case 'bad': return 'from-red-500/20 to-orange-500/20 border-red-500/30';
-      case 'review': return 'from-amber-500/20 to-yellow-500/20 border-amber-500/30';
-      default: return 'from-purple-500/20 to-indigo-500/20 border-purple-500/30';
+  const getChannelColor = (classification: string) => {
+    switch(classification) {
+      case 'growth_memory': return 'from-emerald-500/20 to-teal-500/20 border-emerald-500/30';
+      case 'challenge_memory': return 'from-red-500/20 to-orange-500/20 border-red-500/30';
+      case 'wisdom_moment': return 'from-purple-500/20 to-indigo-500/20 border-purple-500/30';
+      case 'needs_support': return 'from-orange-500/20 to-yellow-500/20 border-orange-500/30';
+      default: return 'from-gray-500/20 to-slate-500/20 border-gray-500/30';
     }
   };
 
   const filteredMemories = selectedChannel === 'all'
     ? memories
-    : memories.filter(m => m.metadata?.gating_routing === selectedChannel);
+    : memories.filter(m => m.metadata?.classification === selectedChannel);
 
   if (!mounted) {
     return (
@@ -392,7 +409,7 @@ export function MemoriesClient({
                   Neural Memory Matrix
                 </h1>
               </div>
-              <p className="text-slate-400 ml-16">AI-powered semantic memory with multi-channel processing</p>
+              <p className="text-slate-400 ml-16">AI-powered semantic memory with ethical growth</p>
             </div>
             <div className="flex items-center gap-4">
               <button
@@ -405,7 +422,7 @@ export function MemoriesClient({
               <div className="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 backdrop-blur-xl">
                 <div className="flex items-center gap-2">
                   <Database className="w-4 h-4 text-emerald-400" />
-                  <span className="text-sm font-semibold text-emerald-300">{stats.total} Vectors</span>
+                  <span className="text-sm font-semibold text-emerald-300">{stats.total} Memories</span>
                 </div>
               </div>
             </div>
@@ -416,9 +433,9 @@ export function MemoriesClient({
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {[
             { label: 'Total', value: stats.total, icon: Database, color: 'purple', channel: 'all' },
-            { label: 'Good Channel', value: stats.good, icon: CheckCircle2, color: 'emerald', channel: 'good' },
-            { label: 'Bad Channel', value: stats.bad, icon: Shield, color: 'red', channel: 'bad' },
-            { label: 'Review Queue', value: stats.review, icon: AlertTriangle, color: 'amber', channel: 'review' }
+            { label: 'Growth', value: stats.good, icon: CheckCircle2, color: 'emerald', channel: 'growth_memory' },
+            { label: 'Challenge', value: stats.bad, icon: Shield, color: 'red', channel: 'challenge_memory' },
+            { label: 'Neutral', value: stats.review, icon: Brain, color: 'gray', channel: 'neutral_interaction' }
           ].map((stat, i) => (
             <button
               key={i}
@@ -518,36 +535,38 @@ export function MemoriesClient({
         {/* Gating Result */}
         {lastGatingResult && (
           <div className={`rounded-2xl p-6 backdrop-blur-xl border ${
-            lastGatingResult.routing === 'good' 
+            lastGatingResult.classification === 'growth_memory' 
               ? 'bg-emerald-500/10 border-emerald-500/30'
-              : lastGatingResult.routing === 'bad'
+              : lastGatingResult.classification === 'challenge_memory'
               ? 'bg-red-500/10 border-red-500/30'
-              : 'bg-amber-500/10 border-amber-500/30'
+              : 'bg-purple-500/10 border-purple-500/30'
           }`}>
             <div className="flex items-start gap-4">
               <div className="p-2 rounded-xl bg-white/5">
-                {getChannelIcon(lastGatingResult.routing)}
+                {getChannelIcon(lastGatingResult.classification)}
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold mb-2 text-slate-200">Content Moderation Result</h3>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <Badge className="bg-white/10">
-                    {lastGatingResult.routing.toUpperCase()} Channel
+                <h3 className="font-semibold mb-2 text-slate-200">Memory Classified</h3>
+                <div className="flex items-center gap-3 flex-wrap mb-3">
+                  <Badge className="bg-white/10 capitalize">
+                    {lastGatingResult.classification.replace('_', ' ')}
                   </Badge>
                   <Badge variant="outline" className="border-white/20">
-                    Valence: {lastGatingResult.valence}
+                    Stage: {lastGatingResult.growth_stage}/5
                   </Badge>
-                  {lastGatingResult.scores?.alignment !== undefined && (
-                    <Badge variant="outline" className="border-white/20">
-                      Alignment: {(lastGatingResult.scores.alignment * 100).toFixed(0)}%
-                    </Badge>
-                  )}
                 </div>
                 
-                {lastGatingResult.safe_counterfactual && (
-                  <div className="mt-3 p-3 bg-red-500/10 rounded-lg text-sm border border-red-500/20">
-                    <strong className="text-red-300">Safe Alternative:</strong>{' '}
-                    <span className="text-slate-300">{lastGatingResult.safe_counterfactual}</span>
+                {lastGatingResult.gentle_guidance && (
+                  <div className="mt-3 p-3 bg-blue-500/10 rounded-lg text-sm border border-blue-500/20">
+                    <strong className="text-blue-300">💭 Guidance:</strong>{' '}
+                    <span className="text-slate-300">{lastGatingResult.gentle_guidance}</span>
+                  </div>
+                )}
+
+                {lastGatingResult.reflection_prompt && (
+                  <div className="mt-3 p-3 bg-purple-500/10 rounded-lg text-sm border border-purple-500/20">
+                    <strong className="text-purple-300">🤔 Reflection:</strong>{' '}
+                    <span className="text-slate-300">{lastGatingResult.reflection_prompt}</span>
                   </div>
                 )}
               </div>
@@ -600,7 +619,7 @@ export function MemoriesClient({
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddMemory()}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAddMemory()}
               placeholder="Type something to remember..."
               disabled={!ollamaStatus?.hasNomicEmbed || adding}
               className="flex-1 bg-slate-900/50 border-slate-700/50 focus:border-purple-500/50 text-slate-200 placeholder:text-slate-500"
@@ -625,7 +644,7 @@ export function MemoriesClient({
           </div>
           <p className="text-xs text-slate-400 mt-2 flex items-center gap-2">
             <Shield className="w-4 h-4" />
-            Content will be analyzed and routed through multi-channel gating
+            Content will be analyzed through ethical growth framework
           </p>
         </div>
 
@@ -636,7 +655,7 @@ export function MemoriesClient({
               <Eye className="w-5 h-5" />
               {selectedChannel === 'all' 
                 ? 'All Memories' 
-                : `${selectedChannel.charAt(0).toUpperCase() + selectedChannel.slice(1)} Channel`}
+                : `${selectedChannel.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')} Memories`}
             </h2>
           </div>
           
@@ -648,23 +667,23 @@ export function MemoriesClient({
             ) : filteredMemories.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
                 <Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No memories in this channel yet</p>
+                <p>No memories in this category yet</p>
               </div>
             ) : (
               filteredMemories.map((memory) => {
-                const channel = memory.metadata?.gating_routing || 'unknown';
+                const classification = memory.metadata?.classification || 'neutral_interaction';
                 return (
                   <div
                     key={memory.id}
                     className="p-6 hover:bg-slate-800/30 transition group"
                   >
                     <div className="flex items-start gap-4">
-                      <div className={`p-3 rounded-xl bg-gradient-to-br ${getChannelColor(channel)} backdrop-blur-xl border`}>
-                        {getChannelIcon(channel)}
+                      <div className={`p-3 rounded-xl bg-gradient-to-br ${getChannelColor(classification)} backdrop-blur-xl border`}>
+                        {getChannelIcon(classification)}
                       </div>
                       
                       <div className="flex-1 min-w-0">
-                        <p className="text-base mb-3 text-slate-200">{memory.content}</p>
+                        <p className="text-base mb-3 text-slate-200">{memory.text || memory.content}</p>
                         
                         {memory.score !== undefined && (
                           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/30 mb-3">
@@ -677,19 +696,19 @@ export function MemoriesClient({
                         
                         {memory.metadata && (
                           <div className="flex items-center gap-2 flex-wrap mb-3">
-                            {memory.metadata.gating_routing && (
-                              <Badge variant="outline" className="text-xs border-white/20">
-                                {memory.metadata.gating_routing}
+                            {memory.metadata.classification && (
+                              <Badge variant="outline" className="text-xs border-white/20 capitalize">
+                                {memory.metadata.classification.replace('_', ' ')}
                               </Badge>
                             )}
-                            {memory.metadata.gating_valence && (
-                              <Badge variant="outline" className="text-xs border-white/20">
-                                {memory.metadata.gating_valence}
+                            {memory.metadata.language && (
+                              <Badge variant="outline" className="text-xs border-white/20 uppercase">
+                                {memory.metadata.language}
                               </Badge>
                             )}
-                            {memory.metadata.gating_scores?.alignment !== undefined && (
+                            {memory.metadata.growth_stage && (
                               <Badge variant="outline" className="text-xs border-white/20">
-                                Alignment: {(memory.metadata.gating_scores.alignment * 100).toFixed(0)}%
+                                Stage {memory.metadata.growth_stage}/5
                               </Badge>
                             )}
                           </div>
