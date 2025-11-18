@@ -1,4 +1,4 @@
-// apps/app/app/api/memories/route.ts - FIXED VERSION (Join Tables)
+// apps/app/app/api/memories/route.ts - COMPLETE FIX
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { database as db } from '@repo/database';
@@ -7,7 +7,7 @@ import { Client } from 'pg';
 const NORTHFLANK_API_TOKEN = process.env.NORTHFLANK_API_TOKEN!;
 const GATING_SERVICE_URL = process.env.GATING_SERVICE_URL || 'http://localhost:8080';
 
-// ===== POST: Add Memory =====
+// ===== POST: Add Memory - FIX: ส่ง database_url ไป Gating =====
 export async function POST(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -39,28 +39,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Database not initialized' }, { status: 400 });
     }
 
+    // ✅ FIX 1: Get connection string BEFORE calling gating
     const connectionString = await getPostgresConnectionString(user.northflankProjectId);
     
     if (!connectionString) {
       throw new Error('Cannot get database connection');
     }
 
-    console.log('📝 Sending to gating service...');
+    console.log('📝 Sending to gating service WITH database_url...');
 
-    // ✅ Call Gating Service (will create embedding and save to both tables)
+    // ✅ FIX 2: ส่ง database_url ไป Gating Service
     const gatingResponse = await fetch(`${GATING_SERVICE_URL}/gating/ethical-route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_id: user.id,
         text: text,
-        database_url: connectionString,
+        database_url: connectionString, // ← ✅ เพิ่มบรรทัดนี้!
         metadata: metadata,
       }),
     });
 
     if (!gatingResponse.ok) {
       const errorText = await gatingResponse.text();
+      console.error('❌ Gating error:', errorText);
       throw new Error(`Gating service error: ${errorText}`);
     }
 
@@ -70,6 +72,7 @@ export async function POST(request: NextRequest) {
       classification: gatingResult.routing,
       stage: gatingResult.growth_stage,
       language: gatingResult.detected_language,
+      memory_id: gatingResult.memory_id, // ถ้า gating return กลับมา
     });
 
     return NextResponse.json({
@@ -82,7 +85,7 @@ export async function POST(request: NextRequest) {
       gentle_guidance: gatingResult.gentle_guidance,
       growth_opportunity: gatingResult.growth_opportunity,
       detected_language: gatingResult.detected_language,
-      message: 'Memory processed successfully',
+      message: 'Memory processed and stored successfully',
     });
 
   } catch (error) {
@@ -94,7 +97,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// ===== GET: List Memories - FIXED TO JOIN BOTH TABLES =====
+// ===== GET: List Memories - FIX: ดึง classification อย่างถูกต้อง =====
 export async function GET(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -104,7 +107,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get('query'); // For semantic search
+    const query = searchParams.get('query');
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
 
@@ -135,10 +138,9 @@ export async function GET(request: NextRequest) {
       let memories = [];
 
       if (query) {
-        // ✅ SEMANTIC SEARCH: Join memory_embeddings with interaction_memories
+        // ✅ SEMANTIC SEARCH with better JOIN
         console.log(`🔍 Semantic search: "${query}"`);
         
-        // Generate embedding for query
         const OLLAMA_URL = process.env.OLLAMA_EXTERNAL_URL!;
         const embeddingResponse = await fetch(`${OLLAMA_URL}/api/embeddings`, {
           method: 'POST',
@@ -157,75 +159,57 @@ export async function GET(request: NextRequest) {
         const queryEmbedding = embeddingData.embedding;
         const vectorString = `[${queryEmbedding.join(',')}]`;
 
-        // ✅ JOIN with interaction_memories to get classification and metadata
+        // ✅ FIX 3: Better query - ดึงจาก interaction_memories เป็นหลัก
         const result = await client.query(`
           SELECT 
-            me.id::text as id,
-            me.content as text,
-            me.metadata,
-            me.created_at,
+            im.id::text as id,
+            im.text,
             im.classification,
             im.ethical_scores,
             im.moments,
             im.reflection_prompt,
             im.gentle_guidance,
+            im.metadata,
+            im.created_at,
+            me.embedding,
             1 - (me.embedding <=> $1::vector) as score
-          FROM user_data_schema.memory_embeddings me
-          LEFT JOIN user_data_schema.interaction_memories im 
-            ON im.metadata->>'memory_embedding_id' = me.id::text
-            AND im.user_id = me.user_id
-          WHERE me.user_id = $2
+          FROM user_data_schema.interaction_memories im
+          INNER JOIN user_data_schema.memory_embeddings me 
+            ON me.id::text = (im.metadata->>'memory_embedding_id')
+          WHERE im.user_id = $2
           ORDER BY me.embedding <=> $1::vector
           LIMIT $3 OFFSET $4
         `, [vectorString, user.id, limit, offset]);
 
-        memories = result.rows.map(row => ({
-          ...row,
-          metadata: {
-            ...row.metadata,
-            classification: row.classification || row.metadata?.classification,
-          }
-        }));
+        memories = result.rows;
       } else {
-        // ✅ LIST ALL: Join memory_embeddings with interaction_memories
-        console.log('📋 Listing all memories with JOIN');
+        // ✅ FIX 4: List all - ดึงจาก interaction_memories เป็นหลัก
+        console.log('📋 Listing all memories from interaction_memories');
         
         const result = await client.query(`
           SELECT 
-            me.id::text as id,
-            me.content as text,
-            me.metadata,
-            me.created_at,
+            im.id::text as id,
+            im.text,
             im.classification,
             im.ethical_scores,
             im.moments,
             im.reflection_prompt,
-            im.gentle_guidance
-          FROM user_data_schema.memory_embeddings me
-          LEFT JOIN user_data_schema.interaction_memories im 
-            ON im.metadata->>'memory_embedding_id' = me.id::text
-            AND im.user_id = me.user_id
-          WHERE me.user_id = $1
-          ORDER BY me.created_at DESC
+            im.gentle_guidance,
+            im.metadata,
+            im.created_at
+          FROM user_data_schema.interaction_memories im
+          WHERE im.user_id = $1
+          ORDER BY im.created_at DESC
           LIMIT $2 OFFSET $3
         `, [user.id, limit, offset]);
 
-        // ✅ Merge classification from both sources
-        memories = result.rows.map(row => ({
-          ...row,
-          metadata: {
-            ...row.metadata,
-            classification: row.classification || row.metadata?.classification,
-            language: row.metadata?.language,
-            growth_stage: row.metadata?.growth_stage,
-          }
-        }));
+        memories = result.rows;
       }
       
-      // Get total count
+      // Get total count from interaction_memories
       const countResult = await client.query(`
         SELECT COUNT(*) as total
-        FROM user_data_schema.memory_embeddings
+        FROM user_data_schema.interaction_memories
         WHERE user_id = $1
       `, [user.id]);
       
@@ -246,10 +230,20 @@ export async function GET(request: NextRequest) {
         WHERE user_id = $1
       `, [user.id]);
       
-      console.log(`✅ Retrieved ${memories.length} memories`);
+      console.log(`✅ Retrieved ${memories.length} memories with classifications`);
+      
+      // ✅ FIX 5: Ensure classification is never null
+      const sanitizedMemories = memories.map(m => ({
+        ...m,
+        classification: m.classification || 'neutral_interaction',
+        metadata: {
+          ...m.metadata,
+          classification: m.classification || 'neutral_interaction',
+        }
+      }));
       
       return NextResponse.json({
-        memories: memories,
+        memories: sanitizedMemories,
         total: parseInt(countResult.rows[0]?.total || '0'),
         limit,
         offset,
@@ -269,7 +263,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// ===== DELETE: Remove Memory - Delete from BOTH tables =====
+// ===== DELETE: Remove Memory - Delete from interaction_memories first =====
 export async function DELETE(request: NextRequest) {
   try {
     const { userId: clerkUserId } = await auth();
@@ -308,24 +302,31 @@ export async function DELETE(request: NextRequest) {
     try {
       await client.connect();
       
-      // ✅ Delete from interaction_memories first (foreign key)
-      await client.query(`
+      // ✅ FIX 6: Delete from interaction_memories by ID directly
+      const deleteResult = await client.query(`
         DELETE FROM user_data_schema.interaction_memories
-        WHERE metadata->>'memory_embedding_id' = $1 
-          AND user_id = $2
-      `, [memoryId, user.id]);
-      
-      // ✅ Then delete from memory_embeddings
-      await client.query(`
-        DELETE FROM user_data_schema.memory_embeddings
         WHERE id = $1 AND user_id = $2
+        RETURNING metadata->>'memory_embedding_id' as embedding_id
       `, [memoryId, user.id]);
       
-      console.log(`✅ Deleted memory ${memoryId}`);
+      if (deleteResult.rowCount === 0) {
+        return NextResponse.json({ error: 'Memory not found' }, { status: 404 });
+      }
+      
+      // ✅ Also delete linked memory_embedding if exists
+      const embeddingId = deleteResult.rows[0]?.embedding_id;
+      if (embeddingId) {
+        await client.query(`
+          DELETE FROM user_data_schema.memory_embeddings
+          WHERE id = $1
+        `, [embeddingId]);
+      }
+      
+      console.log(`✅ Deleted memory ${memoryId} and linked embedding`);
       
       return NextResponse.json({
         success: true,
-        message: 'Memory deleted',
+        message: 'Memory deleted successfully',
       });
       
     } finally {
