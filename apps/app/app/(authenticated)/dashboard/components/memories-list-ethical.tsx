@@ -5,8 +5,8 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@repo/design-system/components/ui/select';
+import { Checkbox } from '@repo/design-system/components/ui/checkbox';
 import { Sparkles, Brain, Shield, Lightbulb, AlertCircle, Trash2 } from 'lucide-react';
 
 export default function MemoriesListEthical() {
