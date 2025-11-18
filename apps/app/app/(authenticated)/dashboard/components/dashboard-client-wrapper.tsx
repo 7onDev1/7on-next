@@ -4,10 +4,14 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@repo/design-system/components/ui/button";
-import { Github, Linkedin, Sparkles, Loader2, Check, Database, AlertCircle, Brain } from "lucide-react";
+import { Github, Linkedin, Sparkles, Loader2, Check, Database, AlertCircle, Brain, LayoutDashboard, Settings } from "lucide-react";
 import { useSubscription } from "@repo/auth/hooks/use-subscription";
 import type { SubscriptionTier } from "@repo/auth/client";
 import { GL } from "@/components/gl";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@repo/design-system/components/ui/tabs";
+import { LayoutDashboard, Sparkles as SparklesIcon, Brain as BrainIcon, Settings } from "lucide-react";
+import EthicalProfileDashboard from "./ethical-profile-dashboard";
+import MemoriesListEthical from "./memories-list-ethical";
 
 /* ----------------------------- Icon components ---------------------------- */
 const GoogleIcon = () => (
@@ -185,7 +189,10 @@ const ConnectionStatusIndicator = ({
 };
 
 /* ------------------------------- Component -------------------------------- */
+
+
 export function DashboardClientWrapper({ userId, userEmail, initialTier }: DashboardClientProps) {
+  const [activeTab, setActiveTab] = useState('overview');
   const router = useRouter();
   const searchParams = useSearchParams();
   const subscription = useSubscription();
@@ -553,168 +560,226 @@ const fetchStats = useCallback(async () => {
           </div>
           <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-[#FF6B5B]/40 to-transparent mt-4 mb-4 rounded-full" />
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
+{/* ✨ NEW: Wrap everything in Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+            {/* ✨ NEW: Tab Navigation */}
+            <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid bg-white/30 dark:bg-white/10 backdrop-blur-sm border border-white/30 dark:border-white/10 rounded-xl">
+              <TabsTrigger 
+                value="overview" 
+                className="flex items-center gap-2 data-[state=active]:bg-white/50 dark:data-[state=active]:bg-white/20 rounded-lg"
+              >
+                <LayoutDashboard className="w-4 h-4" />
+                <span className="hidden sm:inline">Overview</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="ethical" 
+                className="flex items-center gap-2 data-[state=active]:bg-white/50 dark:data-[state=active]:bg-white/20 rounded-lg"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span className="hidden sm:inline">Ethical Growth</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="memories" 
+                className="flex items-center gap-2 data-[state=active]:bg-white/50 dark:data-[state=active]:bg-white/20 rounded-lg"
+              >
+                <Brain className="w-4 h-4" />
+                <span className="hidden sm:inline">Memories</span>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="settings" 
+                className="flex items-center gap-2 data-[state=active]:bg-white/50 dark:data-[state=active]:bg-white/20 rounded-lg"
+              >
+                <Settings className="w-4 h-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </TabsTrigger>
+            </TabsList>
 
-            {/* Card 1: Memory Start Button */}
-            <div className="relative p-6 rounded-2xl transition-all mt-4 md:mt-10">
-              <div className="flex flex-col items-center mb-6">
-                {memoryButtonReady ? (
-                  <Link href="/dashboard/memories" className="group">
-                    <button className="relative w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-indigo-600/20 backdrop-blur-sm border border-purple-400/30 shadow-lg shadow-purple-500/20 hover:shadow-2xl hover:shadow-purple-500/40 transition-all duration-300 hover:scale-110 flex items-center justify-center">
-                      <div className="w-5 h-5 rounded-full bg-[#10b981] shadow-[0_0_12px_rgba(16,185,129,0.6),0_0_20px_rgba(16,185,129,0.3)]">
-                        <div className="absolute inset-0 rounded-full bg-[#10b981] animate-ping opacity-75" />
-                      </div>
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500/30 to-indigo-600/30 blur-md -z-10" />
-                    </button>
-                    <span className="block text-center mt-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-                      Memory Matrix
-                    </span>
-                  </Link>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <button
-                      onClick={handleMemorySetup}
-                      disabled={memoryButtonDisabled}
-                      className="relative w-20 h-20 rounded-full bg-gradient-to-br from-slate-200/30 to-slate-300/30 dark:from-slate-700/30 dark:to-slate-800/30 backdrop-blur-sm border border-slate-300/40 dark:border-slate-600/40 shadow-lg shadow-slate-400/20 dark:shadow-slate-900/40 hover:shadow-2xl hover:shadow-slate-400/40 dark:hover:shadow-slate-900/60 transition-all duration-300 hover:scale-110 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                    >
-                      {setupLoading ? (
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                      ) : (
-                        <div className={`w-5 h-5 rounded-full ${
-                          setupLoading 
-                            ? 'bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.6),0_0_20px_rgba(234,179,8,0.3)]' 
-                            : 'bg-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.6),0_0_20px_rgba(249,115,22,0.3)]'
-                        }`}>
-                          {setupLoading && (
-                            <div className="absolute inset-0 rounded-full bg-yellow-500 animate-ping opacity-75" />
+            {/* ✨ Overview Tab - Original Dashboard Content */}
+            <TabsContent value="overview" className="mt-0">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6" onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}>
+
+                {/* Card 1: Memory Start Button */}
+                <div className="relative p-6 rounded-2xl transition-all mt-4 md:mt-10">
+                  <div className="flex flex-col items-center mb-6">
+                    {memoryButtonReady ? (
+                      <Link href="/dashboard/memories" className="group">
+                        <button className="relative w-20 h-20 rounded-full bg-gradient-to-br from-purple-500/20 to-indigo-600/20 backdrop-blur-sm border border-purple-400/30 shadow-lg shadow-purple-500/20 hover:shadow-2xl hover:shadow-purple-500/40 transition-all duration-300 hover:scale-110 flex items-center justify-center">
+                          <div className="w-5 h-5 rounded-full bg-[#10b981] shadow-[0_0_12px_rgba(16,185,129,0.6),0_0_20px_rgba(16,185,129,0.3)]">
+                            <div className="absolute inset-0 rounded-full bg-[#10b981] animate-ping opacity-75" />
+                          </div>
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-purple-500/30 to-indigo-600/30 blur-md -z-10" />
+                        </button>
+                        <span className="block text-center mt-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          Memory Matrix
+                        </span>
+                      </Link>
+                    ) : (
+                      <div className="flex flex-col items-center">
+                        <button
+                          onClick={handleMemorySetup}
+                          disabled={memoryButtonDisabled}
+                          className="relative w-20 h-20 rounded-full bg-gradient-to-br from-slate-200/30 to-slate-300/30 dark:from-slate-700/30 dark:to-slate-800/30 backdrop-blur-sm border border-slate-300/40 dark:border-slate-600/40 shadow-lg shadow-slate-400/20 dark:shadow-slate-900/40 hover:shadow-2xl hover:shadow-slate-400/40 dark:hover:shadow-slate-900/60 transition-all duration-300 hover:scale-110 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                        >
+                          {setupLoading ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                          ) : (
+                            <div className={`w-5 h-5 rounded-full ${
+                              setupLoading 
+                                ? 'bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.6),0_0_20px_rgba(234,179,8,0.3)]' 
+                                : 'bg-[#f97316] shadow-[0_0_12px_rgba(249,115,22,0.6),0_0_20px_rgba(249,115,22,0.3)]'
+                            }`}>
+                              {setupLoading && (
+                                <div className="absolute inset-0 rounded-full bg-yellow-500 animate-ping opacity-75" />
+                              )}
+                            </div>
                           )}
+                          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-300/30 to-slate-400/30 dark:from-slate-600/30 dark:to-slate-700/30 blur-md -z-10" />
+                        </button>
+                        <span className="block text-center mt-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                          {setupLoading 
+                            ? 'Setting up...' 
+                            : !memoriesStatus.projectReady 
+                            ? 'Initializing...' 
+                            : 'Start'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="w-full h-px bg-slate-200/40 dark:bg-slate-700/40 mb-4" />
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center">
+                      <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Connections</div>
+                      <div className="text-2xl font-bold text-slate-900 dark:text-white">{stats.activeConnections}</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Plan</div>
+                      <div className="text-2xl font-bold text-slate-900 dark:text-white">{currentTier}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Available Integrations */}
+                <div className="p-6 rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] transition-all hover:bg-white/40 dark:hover:bg-white/8">
+                  <h3 className="text-slate-800 dark:text-slate-200 text-lg font-bold mb-6">Available Integrations</h3>
+
+                  <div className="space-y-3">
+                    {availableServices.map(({ service, label, icon }) => {
+                      const loading = loadingConnect === service;
+                      const isDisconnecting = disconnecting[service];
+                      const status = connectionStatus[service] || 'disconnected';
+                      const error = connectionErrors[service];
+                      const isConnected = status === 'connected';
+                      const isVerifying = status === 'verifying';
+                      
+                      return (
+                        <div
+                          key={service}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition border border-slate-200/40 dark:border-slate-700/30 bg-white/30 dark:bg-white/5 backdrop-blur-sm"
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/30 dark:bg-white/5">
+                              {icon}
+                            </div>
+                            <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                              {isConnected ? `${label} Connected` : isVerifying ? `${label} Verifying...` : `${label}`}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            {loading || isDisconnecting ? (
+                              <Loader2 className="h-4 w-4 animate-spin text-slate-600 dark:text-slate-300" />
+                            ) : (
+                              <>
+                                <ConnectionStatusIndicator status={status} error={error} />
+                                
+                                {isConnected ? (
+                                  <button
+                                    onClick={() => openDisconnectDialog(service, label)}
+                                    disabled={isDisconnecting}
+                                    className="text-xs px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label={`Disconnect ${label}`}
+                                  >
+                                    Disconnect
+                                  </button>
+                                ) : !isVerifying && (
+                                  <button
+                                    onClick={() => {
+                                      handleConnect(service, false);
+                                      showToast(`Connecting to ${label}...`);
+                                    }}
+                                    disabled={loading}
+                                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    aria-label={`Connect ${label}`}
+                                  >
+                                    Connect
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Card 3: Upgrade to Unlock */}
+                {lockedServices.length > 0 && (
+                  <div className="p-6 rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] hover:bg-white/40 dark:hover:bg-white/8 transition-all">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-slate-800 dark:text-slate-200 text-lg font-bold">Upgrade to Unlock</h3>
+                      {isFree && (
+                        <Button asChild size="sm" className="rounded-xl px-4 py-2 border-2 border-[#FF6B5B] bg-transparent text-white hover:opacity-90 transition">
+                          <Link href="/pricing" className="flex items-center gap-2">
+                            <Sparkles className="h-4 w-4" />
+                            Upgrade
+                          </Link>
+                        </Button>
                       )}
-                      <div className="absolute inset-0 rounded-full bg-gradient-to-br from-slate-300/30 to-slate-400/30 dark:from-slate-600/30 dark:to-slate-700/30 blur-md -z-10" />
-                    </button>
-                    <span className="block text-center mt-2 text-xs font-medium text-slate-700 dark:text-slate-300">
-                      {setupLoading 
-                        ? 'Setting up...' 
-                        : !memoriesStatus.projectReady 
-                        ? 'Initializing...' 
-                        : 'Start'}
-                    </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {lockedServices.map(({ service, label, icon }) => (
+                        <div key={service} className="flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 border border-slate-200/40 dark:border-slate-700/30 bg-white/20 dark:bg-white/3 cursor-not-allowed opacity-60">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-lg">{icon}</div>
+                          <span className="text-sm text-slate-600 dark:text-slate-300 flex-1">{label}</span>
+                          <svg className="h-4 w-4 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                          </svg>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="text-sm text-slate-500 dark:text-slate-400 mb-3">Unlock more integrations and powerful AI features by upgrading your plan.</div>
+                    </div>
                   </div>
                 )}
               </div>
+            </TabsContent>
 
-              <div className="w-full h-px bg-slate-200/40 dark:bg-slate-700/40 mb-4" />
+            {/* ✨ NEW: Ethical Growth Tab */}
+            <TabsContent value="ethical" className="mt-0">
+              <EthicalProfileDashboard />
+            </TabsContent>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center">
-                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Connections</div>
-                  <div className="text-2xl font-bold text-slate-900 dark:text-white">{stats.activeConnections}</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-xs text-slate-600 dark:text-slate-400 mb-1">Plan</div>
-                  <div className="text-2xl font-bold text-slate-900 dark:text-white">{currentTier}</div>
-                </div>
+            {/* ✨ NEW: Memories Tab */}
+            <TabsContent value="memories" className="mt-0">
+              <MemoriesListEthical />
+            </TabsContent>
+
+            {/* ✨ NEW: Settings Tab */}
+            <TabsContent value="settings" className="mt-0">
+              <div className="rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] p-6">
+                <h3 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">Account Settings</h3>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  Settings content coming soon...
+                </p>
               </div>
-            </div>
-
-            {/* Card 2: Available Integrations */}
-            <div className="p-6 rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] transition-all hover:bg-white/40 dark:hover:bg-white/8">
-              <h3 className="text-slate-800 dark:text-slate-200 text-lg font-bold mb-6">Available Integrations</h3>
-
-              <div className="space-y-3">
-                {availableServices.map(({ service, label, icon }) => {
-                  const loading = loadingConnect === service;
-                  const isDisconnecting = disconnecting[service];
-                  const status = connectionStatus[service] || 'disconnected';
-                  const error = connectionErrors[service];
-                  const isConnected = status === 'connected';
-                  const isVerifying = status === 'verifying';
-                  
-                  return (
-                    <div
-                      key={service}
-                      className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl transition border border-slate-200/40 dark:border-slate-700/30 bg-white/30 dark:bg-white/5 backdrop-blur-sm"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/30 dark:bg-white/5">
-                          {icon}
-                        </div>
-                        <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                          {isConnected ? `${label} Connected` : isVerifying ? `${label} Verifying...` : `${label}`}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        {loading || isDisconnecting ? (
-                          <Loader2 className="h-4 w-4 animate-spin text-slate-600 dark:text-slate-300" />
-                        ) : (
-                          <>
-                            <ConnectionStatusIndicator status={status} error={error} />
-                            
-                            {isConnected ? (
-                              <button
-                                onClick={() => openDisconnectDialog(service, label)}
-                                disabled={isDisconnecting}
-                                className="text-xs px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                aria-label={`Disconnect ${label}`}
-                              >
-                                Disconnect
-                              </button>
-                            ) : !isVerifying && (
-                              <button
-                                onClick={() => {
-                                  handleConnect(service, false);
-                                  showToast(`Connecting to ${label}...`);
-                                }}
-                                disabled={loading}
-                                className="text-xs px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                aria-label={`Connect ${label}`}
-                              >
-                                Connect
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Card 3: Upgrade to Unlock */}
-            {lockedServices.length > 0 && (
-              <div className="p-6 rounded-2xl bg-white/30 dark:bg-white/10 border border-white/30 dark:border-white/10 shadow-[0_8px_32px_rgba(2,6,23,0.08)] hover:bg-white/40 dark:hover:bg-white/8 transition-all">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-slate-800 dark:text-slate-200 text-lg font-bold">Upgrade to Unlock</h3>
-                  {isFree && (
-                    <Button asChild size="sm" className="rounded-xl px-4 py-2 border-2 border-[#FF6B5B] bg-transparent text-white hover:opacity-90 transition">
-                      <Link href="/pricing" className="flex items-center gap-2">
-                        <Sparkles className="h-4 w-4" />
-                        Upgrade
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  {lockedServices.map(({ service, label, icon }) => (
-                    <div key={service} className="flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 border border-slate-200/40 dark:border-slate-700/30 bg-white/20 dark:bg-white/3 cursor-not-allowed opacity-60">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg">{icon}</div>
-                      <span className="text-sm text-slate-600 dark:text-slate-300 flex-1">{label}</span>
-                      <svg className="h-4 w-4 text-slate-400 dark:text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                      </svg>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6">
-                  <div className="text-sm text-slate-500 dark:text-slate-400 mb-3">Unlock more integrations and powerful AI features by upgrading your plan.</div>
-                </div>
-              </div>
-            )}
-          </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Confirmation Dialog */}
           {confirmDialog.isOpen && (

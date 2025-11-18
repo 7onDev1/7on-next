@@ -1,13 +1,12 @@
-// apps/app/lib/postgres-setup.ts
+// lib/postgres-setup.ts
 /**
- * ✅ Complete Postgres Setup with Two-Channel + MCL + Training Jobs
- * รันเมื่อ user กด "Setup Database" ครั้งแรก
- * สร้างทั้ง semantic memory (เดิม) + two-channel tables (ใหม่) + training jobs tracking
+ * 🌟 Ethical Growth System - Complete Postgres Schema
+ * Migration from Two-Channel to Ethical Growth Architecture
  */
 
 import { Client } from 'pg';
 
-export async function initializeUserPostgresSchema(
+export async function initializeEthicalGrowthSchema(
   connectionString: string,
   adminConnectionString?: string
 ): Promise<boolean> {
@@ -16,67 +15,192 @@ export async function initializeUserPostgresSchema(
   
   try {
     await client.connect();
-    console.log('✅ Connected to User Postgres Addon');
+    console.log('✅ Connected to User Postgres');
     
     // ========================================
     // STEP 1: Extensions & Schema
     // ========================================
     await client.query(`CREATE EXTENSION IF NOT EXISTS vector`);
-    console.log('✅ pgvector extension created');
+    console.log('✅ pgvector extension enabled');
     
     await client.query(`CREATE SCHEMA IF NOT EXISTS user_data_schema`);
-    console.log('✅ Schema created: user_data_schema');
+    console.log('✅ Schema: user_data_schema');
     
     // ========================================
-    // STEP 2: Original Semantic Memory Tables
-    // (เดิมที่มีอยู่แล้ว - เก็บไว้)
+    // STEP 2: Ethical Profiles (User's Journey)
     // ========================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_data_schema.ethical_profiles (
+        user_id TEXT PRIMARY KEY,
+        
+        -- 7 Ethical Dimensions (0-1 scores)
+        self_awareness FLOAT DEFAULT 0.3,
+        emotional_regulation FLOAT DEFAULT 0.4,
+        compassion FLOAT DEFAULT 0.4,
+        integrity FLOAT DEFAULT 0.5,
+        growth_mindset FLOAT DEFAULT 0.4,
+        wisdom FLOAT DEFAULT 0.3,
+        transcendence FLOAT DEFAULT 0.2,
+        
+        -- Growth Stage (1-5)
+        growth_stage INT DEFAULT 2,
+        
+        -- Tracking
+        total_interactions INT DEFAULT 0,
+        breakthrough_moments INT DEFAULT 0,
+        crisis_interventions INT DEFAULT 0,
+        
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        last_calculated_at TIMESTAMPTZ
+      )
+    `);
+    console.log('✅ Table: ethical_profiles');
     
-    // 2.1 Memory Embeddings (768-dim for nomic-embed-text)
+    // ========================================
+    // STEP 3: Interaction Memories (Classified Data)
+    // ========================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_data_schema.interaction_memories (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        
+        -- Content
+        text TEXT NOT NULL,
+        embedding vector(768),
+        
+        -- Classification
+        classification TEXT NOT NULL, -- growth_memory, challenge_memory, wisdom_moment, needs_support, neutral_interaction
+        
+        -- Ethical Analysis
+        ethical_scores JSONB NOT NULL DEFAULT '{}', -- 7 dimensions
+        moments JSONB DEFAULT '[]', -- breakthrough, struggle, crisis, growth
+        
+        -- AI Guidance
+        reflection_prompt TEXT,
+        gentle_guidance TEXT,
+        
+        -- Training Status
+        approved_for_training BOOLEAN DEFAULT FALSE,
+        training_weight FLOAT DEFAULT 1.0, -- Higher weight for growth moments
+        
+        -- Metadata
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Table: interaction_memories');
+    
+    // ========================================
+    // STEP 4: Memory Embeddings (Semantic Search)
+    // ========================================
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data_schema.memory_embeddings (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id TEXT NOT NULL,
         content TEXT NOT NULL,
         embedding vector(768),
-        metadata JSONB DEFAULT '{}'::jsonb,
+        
+        -- Link to interaction memory
+        interaction_memory_id BIGINT,
+        
+        metadata JSONB DEFAULT '{}',
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    console.log('✅ Table created: memory_embeddings');
-    
-    // 2.2 Memories (backup table)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_data_schema.memories (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT,
-        content TEXT NOT NULL,
-        metadata JSONB DEFAULT '{}'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    console.log('✅ Table created: memories');
-    
-    // 2.3 Conversations
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_data_schema.conversations (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id TEXT,
-        title TEXT,
-        messages JSONB DEFAULT '[]'::jsonb,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
-    console.log('✅ Table created: conversations');
+    console.log('✅ Table: memory_embeddings');
     
     // ========================================
-    // STEP 3: Two-Channel Tables (ใหม่)
+    // STEP 5: Growth Milestones (Track Evolution)
+    // ========================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_data_schema.growth_milestones (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        
+        milestone_type TEXT NOT NULL, -- stage_advancement, dimension_breakthrough, crisis_overcome
+        
+        previous_state JSONB,
+        new_state JSONB,
+        
+        trigger_interaction_id BIGINT,
+        description TEXT,
+        
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Table: growth_milestones');
+    
+    // ========================================
+    // STEP 6: Training Jobs (Enhanced)
+    // ========================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_data_schema.training_jobs (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        
+        job_id TEXT NOT NULL,
+        job_name TEXT NOT NULL,
+        adapter_version TEXT NOT NULL,
+        
+        status TEXT DEFAULT 'pending',
+        started_at TIMESTAMPTZ,
+        completed_at TIMESTAMPTZ,
+        
+        -- Dataset Composition
+        dataset_composition JSONB DEFAULT '{}', -- { growth_memory: 10, challenge_memory: 5, etc. }
+        total_samples INT DEFAULT 0,
+        
+        -- Ethical State Snapshot
+        ethical_profile_snapshot JSONB DEFAULT '{}',
+        growth_stage_at_training INT,
+        
+        -- Training Metrics
+        training_loss FLOAT,
+        final_metrics JSONB DEFAULT '{}',
+        
+        error_message TEXT,
+        retry_count INT DEFAULT 0,
+        
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Table: training_jobs');
+    
+    // ========================================
+    // STEP 7: Gating Logs (Audit Trail)
+    // ========================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_data_schema.gating_logs (
+        id BIGSERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        
+        input_text TEXT NOT NULL,
+        classification TEXT,
+        
+        ethical_scores JSONB,
+        growth_stage INT,
+        moments JSONB DEFAULT '[]',
+        
+        reflection_prompt TEXT,
+        gentle_guidance TEXT,
+        
+        processing_time_ms INT,
+        
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Table: gating_logs');
+    
+    // ========================================
+    // STEP 8: Legacy Tables (Keep for Migration)
     // ========================================
     
-    // 3.1 Good Channel
+    // Keep old tables if they exist (for data migration)
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data_schema.stm_good (
         id BIGSERIAL PRIMARY KEY,
@@ -87,14 +211,11 @@ export async function initializeUserPostgresSchema(
         metadata JSONB DEFAULT '{}',
         valence TEXT DEFAULT 'positive',
         alignment_score FLOAT,
-        quality_score FLOAT,
         approved_for_consolidation BOOLEAN DEFAULT FALSE,
-        consolidation_batch_id UUID
+        migrated_to_interaction_memory BOOLEAN DEFAULT FALSE
       )
     `);
-    console.log('✅ Table created: stm_good (Good Channel)');
     
-    // 3.2 Bad Channel
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data_schema.stm_bad (
         id BIGSERIAL PRIMARY KEY,
@@ -109,12 +230,10 @@ export async function initializeUserPostgresSchema(
         shadow_tag TEXT,
         safe_counterfactual TEXT,
         approved_for_shadow_learning BOOLEAN DEFAULT FALSE,
-        consolidation_batch_id UUID
+        migrated_to_interaction_memory BOOLEAN DEFAULT FALSE
       )
     `);
-    console.log('✅ Table created: stm_bad (Bad Channel)');
     
-    // 3.3 Review Channel
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data_schema.stm_review (
         id BIGSERIAL PRIMARY KEY,
@@ -125,13 +244,10 @@ export async function initializeUserPostgresSchema(
         metadata JSONB DEFAULT '{}',
         gating_reason TEXT,
         human_reviewed BOOLEAN DEFAULT FALSE,
-        human_decision TEXT,
-        reviewed_at TIMESTAMPTZ
+        migrated_to_interaction_memory BOOLEAN DEFAULT FALSE
       )
     `);
-    console.log('✅ Table created: stm_review (Review Channel)');
     
-    // 3.4 MCL Chains
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_data_schema.mcl_chains (
         id BIGSERIAL PRIMARY KEY,
@@ -145,114 +261,58 @@ export async function initializeUserPostgresSchema(
         moral_classification TEXT,
         summary TEXT,
         embedding vector(768),
-        approved_for_training BOOLEAN DEFAULT FALSE
+        approved_for_training BOOLEAN DEFAULT FALSE,
+        migrated_to_interaction_memory BOOLEAN DEFAULT FALSE
       )
     `);
-    console.log('✅ Table created: mcl_chains (Moral Context Layer)');
     
-    // 3.5 Semantic Memory (Consolidated)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_data_schema.semantic_memory (
-        id BIGSERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        summary TEXT NOT NULL,
-        canonical_entry JSONB NOT NULL,
-        embedding vector(768),
-        valence TEXT,
-        source_type TEXT,
-        source_ids BIGINT[]
-      )
-    `);
-    console.log('✅ Table created: semantic_memory (Consolidated)');
-    
-    // 3.6 Training Jobs
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_data_schema.training_jobs (
-        id BIGSERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        
-        job_id TEXT NOT NULL,
-        job_name TEXT NOT NULL,
-        adapter_version TEXT NOT NULL,
-        
-        status TEXT DEFAULT 'pending',
-        started_at TIMESTAMPTZ,
-        completed_at TIMESTAMPTZ,
-        
-        dataset_composition JSONB DEFAULT '{}',
-        total_samples INT DEFAULT 0,
-        
-        training_loss FLOAT,
-        final_metrics JSONB DEFAULT '{}',
-        
-        detectors_trained TEXT[],
-        
-        error_message TEXT,
-        retry_count INT DEFAULT 0,
-        
-        metadata JSONB DEFAULT '{}'
-      )
-    `);
-    console.log('✅ Table created: training_jobs');
-    
-    // 3.7 Gating Logs
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_data_schema.gating_logs (
-        id BIGSERIAL PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW(),
-        input_text TEXT NOT NULL,
-        routing_decision TEXT,
-        valence_scores JSONB,
-        toxicity_score FLOAT,
-        rules_triggered TEXT[],
-        mcl_detected BOOLEAN DEFAULT FALSE
-      )
-    `);
-    console.log('✅ Table created: gating_logs (Audit)');
+    console.log('✅ Legacy tables preserved for migration');
     
     // ========================================
-    // STEP 4: Indexes
+    // STEP 9: Indexes
     // ========================================
     
     const indexes = [
-      // Original semantic memory indexes
+      // Ethical Profiles
+      'CREATE INDEX IF NOT EXISTS idx_ethical_profiles_stage ON user_data_schema.ethical_profiles(growth_stage)',
+      'CREATE INDEX IF NOT EXISTS idx_ethical_profiles_updated ON user_data_schema.ethical_profiles(updated_at DESC)',
+      
+      // Interaction Memories
+      'CREATE INDEX IF NOT EXISTS idx_interaction_user ON user_data_schema.interaction_memories(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_interaction_classification ON user_data_schema.interaction_memories(classification)',
+      'CREATE INDEX IF NOT EXISTS idx_interaction_approved ON user_data_schema.interaction_memories(approved_for_training)',
+      'CREATE INDEX IF NOT EXISTS idx_interaction_created ON user_data_schema.interaction_memories(created_at DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_interaction_embedding ON user_data_schema.interaction_memories USING hnsw (embedding vector_cosine_ops)',
+      
+      // Memory Embeddings
       'CREATE INDEX IF NOT EXISTS idx_memory_embeddings_user ON user_data_schema.memory_embeddings(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector_hnsw ON user_data_schema.memory_embeddings USING hnsw (embedding vector_cosine_ops)',
-      'CREATE INDEX IF NOT EXISTS idx_memories_user ON user_data_schema.memories(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_memories_created ON user_data_schema.memories(created_at DESC)',
-      'CREATE INDEX IF NOT EXISTS idx_conversations_user ON user_data_schema.conversations(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_memory_embeddings_vector ON user_data_schema.memory_embeddings USING hnsw (embedding vector_cosine_ops)',
+      'CREATE INDEX IF NOT EXISTS idx_memory_embeddings_interaction ON user_data_schema.memory_embeddings(interaction_memory_id)',
       
-      // Two-channel indexes
-      'CREATE INDEX IF NOT EXISTS idx_stm_good_user ON user_data_schema.stm_good(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_stm_good_approved ON user_data_schema.stm_good(approved_for_consolidation)',
-      'CREATE INDEX IF NOT EXISTS idx_stm_good_created ON user_data_schema.stm_good(created_at DESC)',
+      // Growth Milestones
+      'CREATE INDEX IF NOT EXISTS idx_milestones_user ON user_data_schema.growth_milestones(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_milestones_type ON user_data_schema.growth_milestones(milestone_type)',
+      'CREATE INDEX IF NOT EXISTS idx_milestones_created ON user_data_schema.growth_milestones(created_at DESC)',
       
-      'CREATE INDEX IF NOT EXISTS idx_stm_bad_user ON user_data_schema.stm_bad(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_stm_bad_approved ON user_data_schema.stm_bad(approved_for_shadow_learning)',
-      'CREATE INDEX IF NOT EXISTS idx_stm_bad_shadow_tag ON user_data_schema.stm_bad(shadow_tag)',
-      
-      'CREATE INDEX IF NOT EXISTS idx_stm_review_user ON user_data_schema.stm_review(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_stm_review_pending ON user_data_schema.stm_review(human_reviewed)',
-      
-      'CREATE INDEX IF NOT EXISTS idx_mcl_user ON user_data_schema.mcl_chains(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_mcl_classification ON user_data_schema.mcl_chains(moral_classification)',
-      
-      'CREATE INDEX IF NOT EXISTS idx_sm_user ON user_data_schema.semantic_memory(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_sm_embedding ON user_data_schema.semantic_memory USING hnsw (embedding vector_cosine_ops)',
-      
-      'CREATE INDEX IF NOT EXISTS idx_gating_logs_user ON user_data_schema.gating_logs(user_id)',
-      'CREATE INDEX IF NOT EXISTS idx_gating_logs_decision ON user_data_schema.gating_logs(routing_decision)',
-      'CREATE INDEX IF NOT EXISTS idx_gating_logs_created ON user_data_schema.gating_logs(created_at DESC)',
-      
-      // Training jobs indexes
+      // Training Jobs
       'CREATE INDEX IF NOT EXISTS idx_training_jobs_user ON user_data_schema.training_jobs(user_id)',
       'CREATE INDEX IF NOT EXISTS idx_training_jobs_status ON user_data_schema.training_jobs(status)',
       'CREATE INDEX IF NOT EXISTS idx_training_jobs_created ON user_data_schema.training_jobs(created_at DESC)',
-      'CREATE INDEX IF NOT EXISTS idx_training_jobs_job_id ON user_data_schema.training_jobs(job_id)',
+      
+      // Gating Logs
+      'CREATE INDEX IF NOT EXISTS idx_gating_logs_user ON user_data_schema.gating_logs(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_gating_logs_classification ON user_data_schema.gating_logs(classification)',
+      'CREATE INDEX IF NOT EXISTS idx_gating_logs_created ON user_data_schema.gating_logs(created_at DESC)',
+      
+      // Legacy tables
+      'CREATE INDEX IF NOT EXISTS idx_stm_good_user ON user_data_schema.stm_good(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_stm_good_migrated ON user_data_schema.stm_good(migrated_to_interaction_memory)',
+      'CREATE INDEX IF NOT EXISTS idx_stm_bad_user ON user_data_schema.stm_bad(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_stm_bad_migrated ON user_data_schema.stm_bad(migrated_to_interaction_memory)',
+      'CREATE INDEX IF NOT EXISTS idx_stm_review_user ON user_data_schema.stm_review(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_stm_review_migrated ON user_data_schema.stm_review(migrated_to_interaction_memory)',
+      'CREATE INDEX IF NOT EXISTS idx_mcl_user ON user_data_schema.mcl_chains(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_mcl_migrated ON user_data_schema.mcl_chains(migrated_to_interaction_memory)',
     ];
     
     for (const indexSql of indexes) {
@@ -261,85 +321,84 @@ export async function initializeUserPostgresSchema(
     console.log('✅ All indexes created');
     
     // ========================================
-    // STEP 5: Triggers
+    // STEP 10: Triggers
     // ========================================
     
     await client.query(`
-      CREATE OR REPLACE FUNCTION user_data_schema.update_updated_at_column()
+      CREATE OR REPLACE FUNCTION user_data_schema.update_updated_at()
       RETURNS TRIGGER AS $$
       BEGIN
         NEW.updated_at = NOW();
         RETURN NEW;
       END;
-      $$ language 'plpgsql'
+      $$ LANGUAGE plpgsql
     `);
     
-    // Triggers for original tables
-    await client.query(`
-      DROP TRIGGER IF EXISTS update_memory_embeddings_updated_at ON user_data_schema.memory_embeddings;
-      CREATE TRIGGER update_memory_embeddings_updated_at 
-        BEFORE UPDATE ON user_data_schema.memory_embeddings 
-        FOR EACH ROW 
-        EXECUTE FUNCTION user_data_schema.update_updated_at_column()
-    `);
+    const triggers = [
+      'ethical_profiles',
+      'interaction_memories',
+      'memory_embeddings',
+      'training_jobs',
+    ];
     
-    await client.query(`
-      DROP TRIGGER IF EXISTS update_memories_updated_at ON user_data_schema.memories;
-      CREATE TRIGGER update_memories_updated_at 
-        BEFORE UPDATE ON user_data_schema.memories 
-        FOR EACH ROW 
-        EXECUTE FUNCTION user_data_schema.update_updated_at_column()
-    `);
-    
-    await client.query(`
-      DROP TRIGGER IF EXISTS update_conversations_updated_at ON user_data_schema.conversations;
-      CREATE TRIGGER update_conversations_updated_at 
-        BEFORE UPDATE ON user_data_schema.conversations 
-        FOR EACH ROW 
-        EXECUTE FUNCTION user_data_schema.update_updated_at_column()
-    `);
-    
-    await client.query(`
-      DROP TRIGGER IF EXISTS update_training_jobs_updated_at ON user_data_schema.training_jobs;
-      CREATE TRIGGER update_training_jobs_updated_at 
-        BEFORE UPDATE ON user_data_schema.training_jobs 
-        FOR EACH ROW 
-        EXECUTE FUNCTION user_data_schema.update_updated_at_column()
-    `);
-    
+    for (const table of triggers) {
+      await client.query(`
+        DROP TRIGGER IF EXISTS update_${table}_updated_at ON user_data_schema.${table};
+        CREATE TRIGGER update_${table}_updated_at
+          BEFORE UPDATE ON user_data_schema.${table}
+          FOR EACH ROW
+          EXECUTE FUNCTION user_data_schema.update_updated_at()
+      `);
+    }
     console.log('✅ Triggers created');
     
     // ========================================
-    // STEP 6: Views
+    // STEP 11: Views
     // ========================================
     
+    // View: Training-ready data
     await client.query(`
-      CREATE OR REPLACE VIEW user_data_schema.v_latest_training AS
-      SELECT DISTINCT ON (user_id)
+      CREATE OR REPLACE VIEW user_data_schema.v_training_ready AS
+      SELECT 
         user_id,
-        job_id,
-        adapter_version,
-        status,
-        started_at,
-        completed_at,
-        total_samples,
-        training_loss,
-        error_message,
-        created_at
-      FROM user_data_schema.training_jobs
-      ORDER BY user_id, created_at DESC
+        classification,
+        COUNT(*) as count,
+        AVG((ethical_scores->>'self_awareness')::float) as avg_self_awareness,
+        AVG((ethical_scores->>'compassion')::float) as avg_compassion,
+        AVG(training_weight) as avg_weight
+      FROM user_data_schema.interaction_memories
+      WHERE approved_for_training = TRUE
+      GROUP BY user_id, classification
     `);
-    console.log('✅ View created: v_latest_training');
+    
+    // View: Growth summary
+    await client.query(`
+      CREATE OR REPLACE VIEW user_data_schema.v_growth_summary AS
+      SELECT 
+        ep.user_id,
+        ep.growth_stage,
+        ep.total_interactions,
+        ep.breakthrough_moments,
+        ep.crisis_interventions,
+        COUNT(DISTINCT im.classification) as unique_classifications,
+        COUNT(im.id) as total_memories,
+        COUNT(CASE WHEN im.approved_for_training THEN 1 END) as approved_memories
+      FROM user_data_schema.ethical_profiles ep
+      LEFT JOIN user_data_schema.interaction_memories im ON ep.user_id = im.user_id
+      GROUP BY ep.user_id, ep.growth_stage, ep.total_interactions, ep.breakthrough_moments, ep.crisis_interventions
+    `);
+    
+    console.log('✅ Views created');
     
     // ========================================
-    // STEP 7: Permissions (if using admin connection)
+    // STEP 12: Permissions
     // ========================================
     
     if (adminConnectionString && adminConnectionString !== connectionString) {
       const regularConfig = parsePostgresUrl(connectionString);
       
       if (regularConfig?.user) {
-        console.log(`📝 Granting permissions to user: ${regularConfig.user}`);
+        console.log(`📝 Granting permissions to: ${regularConfig.user}`);
         
         await client.query(`GRANT USAGE ON SCHEMA user_data_schema TO ${regularConfig.user}`);
         await client.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA user_data_schema TO ${regularConfig.user}`);
@@ -351,58 +410,252 @@ export async function initializeUserPostgresSchema(
       }
     }
     
-    console.log('🎉 Complete schema initialization (Semantic Memory + Two-Channel + MCL + Training Jobs) completed!');
+    console.log('🎉 Ethical Growth Schema initialization completed!');
     return true;
     
   } catch (error) {
-    console.error('❌ Error initializing schema:', error);
+    console.error('❌ Schema initialization error:', error);
     return false;
   } finally {
     await client.end();
-    console.log('✅ Connection closed');
   }
 }
 
 /**
- * Test connection to Postgres
+ * Migrate existing data from legacy tables to new structure
  */
-export async function testPostgresConnection(connectionString: string): Promise<boolean> {
+export async function migrateLegacyData(connectionString: string): Promise<{
+  success: boolean;
+  migrated: { good: number; bad: number; review: number; mcl: number };
+  errors: string[];
+}> {
   const client = new Client({ connectionString });
   
   try {
     await client.connect();
-    const result = await client.query('SELECT NOW()');
-    console.log('✅ Postgres connection test passed:', result.rows[0]);
-    return true;
+    console.log('🔄 Starting data migration...');
+    
+    const errors: string[] = [];
+    const migrated = { good: 0, bad: 0, review: 0, mcl: 0 };
+    
+    // Migrate stm_good → growth_memory
+    try {
+      const goodResult = await client.query(`
+        INSERT INTO user_data_schema.interaction_memories 
+          (user_id, text, embedding, classification, ethical_scores, approved_for_training, training_weight, metadata, created_at)
+        SELECT 
+          user_id,
+          text,
+          embedding,
+          'growth_memory' as classification,
+          jsonb_build_object(
+            'self_awareness', COALESCE(alignment_score, 0.5),
+            'emotional_regulation', 0.5,
+            'compassion', 0.5,
+            'integrity', 0.5,
+            'growth_mindset', 0.5,
+            'wisdom', 0.5,
+            'transcendence', 0.3
+          ) as ethical_scores,
+          approved_for_consolidation as approved_for_training,
+          1.5 as training_weight,
+          metadata,
+          created_at
+        FROM user_data_schema.stm_good
+        WHERE migrated_to_interaction_memory = FALSE
+        RETURNING id
+      `);
+      
+      migrated.good = goodResult.rowCount || 0;
+      
+      await client.query(`
+        UPDATE user_data_schema.stm_good
+        SET migrated_to_interaction_memory = TRUE
+        WHERE migrated_to_interaction_memory = FALSE
+      `);
+      
+      console.log(`✅ Migrated ${migrated.good} good channel records`);
+    } catch (error) {
+      errors.push(`Good channel migration: ${(error as Error).message}`);
+    }
+    
+    // Migrate stm_bad → challenge_memory
+    try {
+      const badResult = await client.query(`
+        INSERT INTO user_data_schema.interaction_memories 
+          (user_id, text, embedding, classification, ethical_scores, gentle_guidance, approved_for_training, training_weight, metadata, created_at)
+        SELECT 
+          user_id,
+          text,
+          embedding,
+          'challenge_memory' as classification,
+          jsonb_build_object(
+            'self_awareness', GREATEST(0.3, 1.0 - COALESCE(severity_score, 0.5)),
+            'emotional_regulation', GREATEST(0.2, 1.0 - COALESCE(toxicity_score, 0.5)),
+            'compassion', 0.4,
+            'integrity', 0.4,
+            'growth_mindset', 0.5,
+            'wisdom', 0.4,
+            'transcendence', 0.2
+          ) as ethical_scores,
+          safe_counterfactual as gentle_guidance,
+          approved_for_shadow_learning as approved_for_training,
+          2.0 as training_weight,
+          jsonb_build_object('shadow_tag', shadow_tag, 'original_metadata', metadata) as metadata,
+          created_at
+        FROM user_data_schema.stm_bad
+        WHERE migrated_to_interaction_memory = FALSE
+        RETURNING id
+      `);
+      
+      migrated.bad = badResult.rowCount || 0;
+      
+      await client.query(`
+        UPDATE user_data_schema.stm_bad
+        SET migrated_to_interaction_memory = TRUE
+        WHERE migrated_to_interaction_memory = FALSE
+      `);
+      
+      console.log(`✅ Migrated ${migrated.bad} bad channel records`);
+    } catch (error) {
+      errors.push(`Bad channel migration: ${(error as Error).message}`);
+    }
+    
+    // Migrate stm_review → neutral_interaction
+    try {
+      const reviewResult = await client.query(`
+        INSERT INTO user_data_schema.interaction_memories 
+          (user_id, text, embedding, classification, ethical_scores, approved_for_training, training_weight, metadata, created_at)
+        SELECT 
+          user_id,
+          text,
+          embedding,
+          'neutral_interaction' as classification,
+          jsonb_build_object(
+            'self_awareness', 0.5,
+            'emotional_regulation', 0.5,
+            'compassion', 0.5,
+            'integrity', 0.5,
+            'growth_mindset', 0.5,
+            'wisdom', 0.5,
+            'transcendence', 0.3
+          ) as ethical_scores,
+          FALSE as approved_for_training,
+          0.5 as training_weight,
+          jsonb_build_object('gating_reason', gating_reason, 'original_metadata', metadata) as metadata,
+          created_at
+        FROM user_data_schema.stm_review
+        WHERE migrated_to_interaction_memory = FALSE
+        RETURNING id
+      `);
+      
+      migrated.review = reviewResult.rowCount || 0;
+      
+      await client.query(`
+        UPDATE user_data_schema.stm_review
+        SET migrated_to_interaction_memory = TRUE
+        WHERE migrated_to_interaction_memory = FALSE
+      `);
+      
+      console.log(`✅ Migrated ${migrated.review} review queue records`);
+    } catch (error) {
+      errors.push(`Review queue migration: ${(error as Error).message}`);
+    }
+    
+    // Migrate mcl_chains → wisdom_moment
+    try {
+      const mclResult = await client.query(`
+        INSERT INTO user_data_schema.interaction_memories 
+          (user_id, text, embedding, classification, ethical_scores, approved_for_training, training_weight, metadata, created_at)
+        SELECT 
+          user_id,
+          summary as text,
+          embedding,
+          'wisdom_moment' as classification,
+          jsonb_build_object(
+            'self_awareness', COALESCE(intention_score, 0.5),
+            'emotional_regulation', 0.6,
+            'compassion', COALESCE(benefit_score, 0.5),
+            'integrity', 0.6,
+            'growth_mindset', 0.7,
+            'wisdom', GREATEST(0.6, COALESCE(necessity_score, 0.5)),
+            'transcendence', 0.5
+          ) as ethical_scores,
+          approved_for_training,
+          2.5 as training_weight,
+          jsonb_build_object(
+            'event_chain', event_chain,
+            'moral_classification', moral_classification,
+            'harm_score', harm_score,
+            'benefit_score', benefit_score
+          ) as metadata,
+          created_at
+        FROM user_data_schema.mcl_chains
+        WHERE migrated_to_interaction_memory = FALSE
+        RETURNING id
+      `);
+      
+      migrated.mcl = mclResult.rowCount || 0;
+      
+      await client.query(`
+        UPDATE user_data_schema.mcl_chains
+        SET migrated_to_interaction_memory = TRUE
+        WHERE migrated_to_interaction_memory = FALSE
+      `);
+      
+      console.log(`✅ Migrated ${migrated.mcl} MCL chain records`);
+    } catch (error) {
+      errors.push(`MCL migration: ${(error as Error).message}`);
+    }
+    
+    // Create initial ethical profiles for existing users
+    try {
+      await client.query(`
+        INSERT INTO user_data_schema.ethical_profiles (user_id, total_interactions, created_at)
+        SELECT 
+          user_id,
+          COUNT(*) as total_interactions,
+          MIN(created_at) as created_at
+        FROM user_data_schema.interaction_memories
+        GROUP BY user_id
+        ON CONFLICT (user_id) DO UPDATE SET
+          total_interactions = EXCLUDED.total_interactions
+      `);
+      
+      console.log('✅ Initial ethical profiles created');
+    } catch (error) {
+      errors.push(`Ethical profiles: ${(error as Error).message}`);
+    }
+    
+    const totalMigrated = migrated.good + migrated.bad + migrated.review + migrated.mcl;
+    console.log(`🎉 Migration completed: ${totalMigrated} total records`);
+    
+    return {
+      success: errors.length === 0,
+      migrated,
+      errors,
+    };
+    
   } catch (error) {
-    console.error('❌ Connection test failed:', error);
-    return false;
+    console.error('❌ Migration error:', error);
+    return {
+      success: false,
+      migrated: { good: 0, bad: 0, review: 0, mcl: 0 },
+      errors: [(error as Error).message],
+    };
   } finally {
     await client.end();
   }
 }
 
-/**
- * Parse Postgres URL
- */
 function parsePostgresUrl(url: string) {
   try {
     const regex = /postgresql:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/([^?]+)/;
     const match = url.match(regex);
-    
     if (!match) return null;
-    
     const [, user, password, host, port, database] = match;
-    
-    return {
-      host,
-      port: parseInt(port, 10),
-      database,
-      user,
-      password,
-    };
-  } catch (error) {
-    console.error('❌ Error parsing URL:', error);
+    return { host, port: parseInt(port), database, user, password };
+  } catch {
     return null;
   }
 }
